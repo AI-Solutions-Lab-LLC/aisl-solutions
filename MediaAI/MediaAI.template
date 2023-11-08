@@ -1,0 +1,1087 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: (SO0050) Media2Cloud - the solution is designed to demonstrate a serverless ingest and analysis framework that can quickly setup a baseline ingest workflow for placing video assets and associated metadata under management control of an AWS customer. Version v3.1.5
+
+Mappings:
+    Solution:
+        Project:
+            Id: "SO0050"
+            LowerCaseId: "so0050"
+            Version: "v3.1.5"
+            CustomUserAgent: AWSSOLUTION/SO0050/v3.1.5
+            SolutionName: "Media2Cloud on AWS"
+            AppRegistryApplicationName: "Media2CloudOnAws"
+            ApplicationType: "AWS-Solutions"
+        Template:
+            S3Bucket: "solutions"
+            KeyPrefix: "media2cloud/v3.1.5"
+            SingleRegion: "false"
+        Stack:
+            Core: media2cloud-core-stack.template
+            Backend: media2cloud-backend-stack.template
+            WebApp: media2cloud-webapp-stack.template
+    Workflow:
+        CustomResources:
+            Package: "custom-resources-v3.1.5.zip"
+            Name: custom-resources
+    AIML:
+        Options:
+            DefaultMinConfidence: 80
+            # store aioptions to proxy bucket
+            S3Key: _settings/aioptions.json
+    Node:
+        Runtime:
+            Version: nodejs16.x
+    Send:
+        AnonymizedUsage:
+            Data: "Yes"
+    Cognito:
+        Group:
+            Viewer: viewer
+            Creator: creator
+            Admin: admin
+
+Parameters:
+    # User defined Ingest Bucket
+    UserDefinedIngestBucket:
+        Type: String
+        Description: If you have an existing bucket that you would like to store uploaded contents, specify the bucket name. Otherwise, leave it blank to auto create a new bucket
+        Default: ""
+    # Elasticsearch
+    OpenSearchCluster:
+        Type: String
+        Description: Configure Amazon OpenSearch cluster size
+        Default: Development and Testing (t3.medium=0,m5.large=1,gp2=10,az=1)
+        AllowedValues:
+            - Development and Testing (t3.medium=0,m5.large=1,gp2=10,az=1)
+            - Suitable for Production Workload (t3.medium=3,m5.large=2,gp2=20,az=2)
+            - Recommended for Production Workload (t3.medium=3,m5.large=4,gp2=20,az=2)
+            - Recommended for Large Production Workload (t3.medium=3,m5.large=6,gp2=40,az=3)
+    # AI/ML Settings
+    DefaultAIOptions:
+        Type: String
+        Description: Configure AI/ML settings
+        Default: Default (celeb,label,segment,transcribe,keyphrase,entity,textract)
+        AllowedValues:
+            - Default (celeb,label,segment,transcribe,keyphrase,entity,textract)
+            - All (celeb,face,facematch,label,moderation,person,text,segment,transcribe,keyphrase,entity,sentiment,textract)
+            - Video analysis (celeb,face,facematch,label,moderation,person,text,segment)
+            - Audio analysis (transcribe,keyphrase,entity)
+            - Image analysis (celeb,face,facematch,label,moderation,text)
+            - Document analysis (textract)
+            - Celebrity recognition only (celeb)
+            - Video segment detection only (segment)
+            - Speech to text only (transcribe)
+            - Others - Celebrity and face matching (celeb,facematch)
+    # SNS / Cognito parameters
+    Email:
+        Type: String
+        Description: Email address of the user that will be created in the Amazon Cognito Identity Pool and subscribed to the Amazon SNS topic. Subscribed users will receive ingest, publishing, and error notifications. After launch, two emails will be sent to this address; one with instructions for logging in to the web interface and one confirming the SNS subscription.
+        # Formats: Email address or Username:Password
+        AllowedPattern: '([^\s@:]+@[^\s@:]+\.[^\s@:]+)|([^\s@:]+:[^\s@:]+)'
+    # CloudFront / Website
+    PriceClass:
+        Type: String
+        Description: Specify the price class of the edge location from which CloudFront serves your requests. For more information, see https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/PriceClass.html
+        AllowedValues:
+            - Use Only U.S., Canada and Europe (PriceClass_100)
+            - Use U.S., Canada, Europe, Asia and Africa (PriceClass_200)
+            - Use All Edge Locations [Best Performance] (PriceClass_All)
+        Default: Use Only U.S., Canada and Europe (PriceClass_100)
+    # S3 Ingest Bucket
+    StartOnObjectCreation:
+        Type: String
+        Description: Start workflow when directly upload assets to ingest S3 bucket
+        Default: "YES"
+        AllowedValues:
+            - "NO"
+            - "YES"
+    # Neptune Knowledge Graph endpoint
+    KnowledgeGraphEndpoint:
+        Type: String
+        Description: specify the API endpoint of the Knowledge Graph database. Leave it blank to disable the feature.
+        Default: ""
+    KnowledgeGraphApiKey:
+        Type: String
+        Description: specify the API Key of the Knowledge Graph API endpoint. Leave it blank to disable the feature.
+        Default: ""
+    # BLIP model (auto caption for image)
+    BlipImageArn:
+        Type: String
+        Description: specify the ECR image Arn of the Auto Captioning feature (BLIP model), ie., {{account}}.dkr.ecr.{{region}}.amazonaws.com/{{repo}}:{{tag}}. Leave it blank to disable the feature.
+        Default: ""
+
+Metadata:
+    AWS::CloudFormation::Interface:
+        ParameterGroups:
+            -
+                Label:
+                    default: Amazon Cognito / Amazon Simple Notification Service
+                Parameters:
+                    - Email
+            -
+                Label:
+                    default: Amazon CloudFront
+                Parameters:
+                    - PriceClass
+            -
+                Label:
+                    default: Amazon OpenSearch Service
+                Parameters:
+                    - OpenSearchCluster
+            -
+                Label:
+                    default: AI/ML Default Settings
+                Parameters:
+                    - DefaultAIOptions
+            -
+                Label:
+                    default: (OPTIONAL) Advanced Customerization
+                Parameters:
+                    - UserDefinedIngestBucket
+                    - StartOnObjectCreation
+            -
+                Label:
+                    default: (EXPERIMENTAL FEATURE) Knowledge Graph
+                Parameters:
+                    - KnowledgeGraphEndpoint
+                    - KnowledgeGraphApiKey
+            -
+                Label:
+                    default: (EXPERIMENTAL FEATURE) Auto-Captioning for Images
+                Parameters:
+                    - BlipImageArn
+        ParameterLabels:
+            Email:
+                default: Email
+            PriceClass:
+                default: Price Class
+            OpenSearchCluster:
+                default: OpenSearch Cluster
+            DefaultAIOptions:
+                default: Analysis Feature(s)
+            UserDefinedIngestBucket:
+                default: User defined Amazon S3 Bucket for ingest
+            StartOnObjectCreation:
+                default: Allow autostart on ingest S3 bucket
+            KnowledgeGraphEndpoint:
+                default: Knowledge Graph API Endpoint
+            KnowledgeGraphApiKey:
+                default: Knowledge Graph API Endpoint API Key
+            BlipImageArn:
+                default: ECR Image ARN of the BLIP model
+
+Conditions:
+    # Using email address for Cognito User Pool
+    bEmail: !Not
+        - !Equals
+            - !Select
+                - 0
+                - !Split
+                    - "@"
+                    - !Ref Email
+            - !Ref Email
+    # Using Username and Temporary Code for Cognito User Pool
+    bUseTemporaryCode: !Not
+        - !Equals
+            - !Select
+                - 0
+                - !Split
+                    - ":"
+                    - !Ref Email
+            - !Ref Email
+    bSingleRegion: !Equals
+        - !FindInMap
+            - Solution
+            - Template
+            - SingleRegion
+        - "true"
+
+Resources:
+    ################################################################################
+    #
+    # Custom Resources
+    #
+    ################################################################################
+    CustomResourcesLogGroup:
+        Metadata:
+            cfn_nag:
+                rules_to_suppress:
+                    -
+                        id: W84
+                        reason: Use default encryption. Disable additional KMS encryption requirement. https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/encrypt-log-data-kms.html
+        Type: AWS::Logs::LogGroup
+        Properties:
+            LogGroupName: !Sub
+                - /aws/lambda/${solutionId}-${stackId}-${name}
+                -
+                    solutionId: !FindInMap
+                        - Solution
+                        - Project
+                        - LowerCaseId
+                    stackId: !Select
+                        - 4
+                        - !Split
+                            - "-"
+                            - !Select
+                                - 2
+                                - !Split
+                                    - "/"
+                                    - !Ref AWS::StackId
+                    name: !FindInMap
+                        - Workflow
+                        - CustomResources
+                        - Name
+            RetentionInDays: 7
+
+    CustomResourcesRole:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    -
+                        Effect: Allow
+                        Action: sts:AssumeRole
+                        Principal:
+                            Service: lambda.amazonaws.com
+            Path: !Sub
+                - /${solutionId}-${stackId}/
+                -
+                    solutionId: !FindInMap
+                        - Solution
+                        - Project
+                        - LowerCaseId
+                    stackId: !Select
+                        - 4
+                        - !Split
+                            - "-"
+                            - !Select
+                                - 2
+                                - !Split
+                                    - "/"
+                                    - !Ref AWS::StackId
+            ManagedPolicyArns:
+                - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+            Policies:
+                -
+                    PolicyName: !Sub
+                        - "${solutionId}-custom-resources"
+                        - solutionId: !FindInMap
+                            - Solution
+                            - Project
+                            - LowerCaseId
+                    PolicyDocument:
+                        Version: "2012-10-17"
+                        Statement:
+                            ## CloudWatch Logs
+                            -
+                                Effect: Allow
+                                Action:
+                                    - logs:CreateLogGroup
+                                    - logs:CreateLogStream
+                                    - logs:PutLogEvents
+                                Resource: !GetAtt CustomResourcesLogGroup.Arn
+
+    CustomResourcesLambda:
+        Type: AWS::Lambda::Function
+        Metadata:
+            cfn_nag:
+                rules_to_suppress:
+                    -
+                        id: W89
+                        reason: Workflow not using VPC
+                    -
+                        id: W92
+                        reason: Workflow not limiting simultaneous executions
+        Properties:
+            FunctionName: !Sub
+                - ${solutionId}-${stackId}-${name}
+                -
+                    solutionId: !FindInMap
+                        - Solution
+                        - Project
+                        - LowerCaseId
+                    stackId: !Select
+                        - 4
+                        - !Split
+                            - "-"
+                            - !Select
+                                - 2
+                                - !Split
+                                    - "/"
+                                    - !Ref AWS::StackId
+                    name: !FindInMap
+                        - Workflow
+                        - CustomResources
+                        - Name
+            Description: !Sub
+                - (${solutionId}) custom resources
+                - solutionId: !FindInMap
+                    - Solution
+                    - Project
+                    - Id
+            Runtime: !FindInMap
+                - Node
+                - Runtime
+                - Version
+            MemorySize: 128
+            Timeout: 900
+            Handler: index.handler
+            Role: !GetAtt CustomResourcesRole.Arn
+            Code:
+                S3Bucket: !Sub
+                    - ${bucket}${region}
+                    -
+                        bucket: !FindInMap
+                            - Solution
+                            - Template
+                            - S3Bucket
+                        region: !If
+                            - bSingleRegion
+                            - ""
+                            - !Sub "-${AWS::Region}"
+                S3Key: !Sub
+                    - "${keyprefix}/${package}"
+                    -
+                        keyprefix: !FindInMap
+                            - Solution
+                            - Template
+                            - KeyPrefix
+                        package: !FindInMap
+                            - Workflow
+                            - CustomResources
+                            - Package
+            TracingConfig:
+                Mode: Active
+            Environment:
+                Variables:
+                    ENV_EXPECTED_BUCKET_OWNER: !Ref AWS::AccountId
+                    ENV_CUSTOM_USER_AGENT: !FindInMap
+                        - Solution
+                        - Project
+                        - CustomUserAgent
+            Tags:
+                -
+                    Key: SolutionId
+                    Value: !FindInMap
+                        - Solution
+                        - Project
+                        - Id
+
+    ################################################################################
+    #
+    # Core stack
+    # * create the core resources shared among other stacks such as:
+    #   Buckets, Lambda Layers, IoT, etc
+    #
+    ################################################################################
+    CoreStack:
+        Type: AWS::CloudFormation::Stack
+        Properties:
+            TemplateURL: !Sub
+                - http://${bucket}${region}.s3.amazonaws.com/${keyprefix}/${stackName}
+                -
+                    bucket: !FindInMap
+                        - Solution
+                        - Template
+                        - S3Bucket
+                    region: !If
+                        - bSingleRegion
+                        - ""
+                        - !Sub -${AWS::Region}
+                    keyprefix: !FindInMap
+                        - Solution
+                        - Template
+                        - KeyPrefix
+                    stackName: !FindInMap
+                        - Solution
+                        - Stack
+                        - Core
+            Parameters:
+                S3Bucket: !Sub
+                    - ${bucket}${region}
+                    -
+                        bucket: !FindInMap
+                            - Solution
+                            - Template
+                            - S3Bucket
+                        region: !If
+                            - bSingleRegion
+                            - ""
+                            - !Sub -${AWS::Region}
+                KeyPrefix: !FindInMap
+                    - Solution
+                    - Template
+                    - KeyPrefix
+                SolutionId: !FindInMap
+                    - Solution
+                    - Project
+                    - Id
+                SolutionLowerCaseId: !FindInMap
+                    - Solution
+                    - Project
+                    - LowerCaseId
+                ResourcePrefix: !Sub
+                    - ${solutionId}-${stackId}
+                    -
+                        solutionId: !FindInMap
+                            - Solution
+                            - Project
+                            - LowerCaseId
+                        stackId: !Select
+                            - 4
+                            - !Split
+                                - "-"
+                                - !Select
+                                    - 2
+                                    - !Split
+                                        - "/"
+                                        - !Ref AWS::StackId
+                CustomResourcesLambdaArn: !GetAtt CustomResourcesLambda.Arn
+                CustomResourcesRoleName: !Ref CustomResourcesRole
+                UserDefinedIngestBucket: !Ref UserDefinedIngestBucket
+                OpenSearchDedicatedMaster: !Select
+                    - 0
+                    - !Split
+                        - ","
+                        - !Select
+                            - 0
+                            - !Split
+                                - ")"
+                                - !Select
+                                    - 1
+                                    - !Split
+                                        - "("
+                                        - !Ref OpenSearchCluster
+                OpenSearchInstance: !Select
+                    - 1
+                    - !Split
+                        - ","
+                        - !Select
+                            - 0
+                            - !Split
+                                - ")"
+                                - !Select
+                                    - 1
+                                    - !Split
+                                        - "("
+                                        - !Ref OpenSearchCluster
+                OpenSearchVolume: !Select
+                    - 2
+                    - !Split
+                        - ","
+                        - !Select
+                            - 0
+                            - !Split
+                                - ")"
+                                - !Select
+                                    - 1
+                                    - !Split
+                                        - "("
+                                        - !Ref OpenSearchCluster
+                OpenSearchAvailabilityZone: !Select
+                    - 3
+                    - !Split
+                        - ","
+                        - !Select
+                            - 0
+                            - !Split
+                                - ")"
+                                - !Select
+                                    - 1
+                                    - !Split
+                                        - "("
+                                        - !Ref OpenSearchCluster
+                PriceClass: !Select
+                    - 0
+                    - !Split
+                        - ")"
+                        - !Select
+                            - 1
+                            - !Split
+                                - "("
+                                - !Ref PriceClass
+
+    ################################################################################
+    #
+    # WebApp stack
+    # * create the core resources shared among other stacks such as:
+    #   Buckets, Lambda Layers, IoT, etc
+    #
+    ################################################################################
+    WebAppStack:
+        Type: AWS::CloudFormation::Stack
+        Properties:
+            TemplateURL: !Sub
+                - http://${bucket}${region}.s3.amazonaws.com/${keyprefix}/${stackName}
+                -
+                    bucket: !FindInMap
+                        - Solution
+                        - Template
+                        - S3Bucket
+                    region: !If
+                        - bSingleRegion
+                        - ""
+                        - !Sub -${AWS::Region}
+                    keyprefix: !FindInMap
+                        - Solution
+                        - Template
+                        - KeyPrefix
+                    stackName: !FindInMap
+                        - Solution
+                        - Stack
+                        - WebApp
+            Parameters:
+                S3Bucket: !Sub
+                    - ${bucket}${region}
+                    -
+                        bucket: !FindInMap
+                            - Solution
+                            - Template
+                            - S3Bucket
+                        region: !If
+                            - bSingleRegion
+                            - ""
+                            - !Sub -${AWS::Region}
+                KeyPrefix: !FindInMap
+                    - Solution
+                    - Template
+                    - KeyPrefix
+                SolutionId: !FindInMap
+                    - Solution
+                    - Project
+                    - Id
+                SolutionLowerCaseId: !FindInMap
+                    - Solution
+                    - Project
+                    - LowerCaseId
+                ResourcePrefix: !Sub
+                    - ${solutionId}-${stackId}
+                    -
+                        solutionId: !FindInMap
+                            - Solution
+                            - Project
+                            - LowerCaseId
+                        stackId: !Select
+                            - 4
+                            - !Split
+                                - "-"
+                                - !Select
+                                    - 2
+                                    - !Split
+                                        - "/"
+                                        - !Ref AWS::StackId
+                CustomUserAgent: !FindInMap
+                    - Solution
+                    - Project
+                    - CustomUserAgent
+                AnonymizedUsage: !FindInMap
+                    - Send
+                    - AnonymizedUsage
+                    - Data
+                CustomResourcesLambdaArn: !GetAtt CustomResourcesLambda.Arn
+                CustomResourcesRoleName: !Ref CustomResourcesRole
+                AwsSdkLayer: !GetAtt CoreStack.Outputs.AwsSdkLayer
+                CoreLibLayer: !GetAtt CoreStack.Outputs.CoreLibLayer
+                SolutionUuid: !GetAtt CoreStack.Outputs.SolutionUuid
+                IotHost: !GetAtt CoreStack.Outputs.IotHost
+                IotTopic: !GetAtt CoreStack.Outputs.IotTopic
+                IotThingPolicy: !GetAtt CoreStack.Outputs.IotThingPolicy
+                IngestBucket: !GetAtt CoreStack.Outputs.IngestBucket
+                ProxyBucket: !GetAtt CoreStack.Outputs.ProxyBucket
+                WebBucket: !GetAtt CoreStack.Outputs.WebBucket
+                CloudFrontDistributionId: !GetAtt CoreStack.Outputs.CloudFrontDistributionId
+                CloudFrontDistributionDomainName: !GetAtt CoreStack.Outputs.CloudFrontDistributionDomainName
+                OpenSearchDomainName: !GetAtt CoreStack.Outputs.OpenSearchDomainName
+                OpenSearchDomainEndpoint: !GetAtt CoreStack.Outputs.OpenSearchDomainEndpoint
+                DefaultAIOptions: !Select
+                    - 0
+                    - !Split
+                        - ")"
+                        - !Select
+                            - 1
+                            - !Split
+                                - "("
+                                - !Ref DefaultAIOptions
+                DefaultMinConfidence: !FindInMap
+                    - AIML
+                    - Options
+                    - DefaultMinConfidence
+                AIOptionsS3Key: !FindInMap
+                    - AIML
+                    - Options
+                    - S3Key
+
+    ################################################################################
+    #
+    # Backend stack
+    #
+    ################################################################################
+    BackendStack:
+        Type: AWS::CloudFormation::Stack
+        Properties:
+            TemplateURL: !Sub
+                - http://${bucket}${region}.s3.amazonaws.com/${keyprefix}/${stackName}
+                -
+                    bucket: !FindInMap
+                        - Solution
+                        - Template
+                        - S3Bucket
+                    region: !If
+                        - bSingleRegion
+                        - ""
+                        - !Sub -${AWS::Region}
+                    keyprefix: !FindInMap
+                        - Solution
+                        - Template
+                        - KeyPrefix
+                    stackName: !FindInMap
+                        - Solution
+                        - Stack
+                        - Backend
+            Parameters:
+                S3Bucket: !Sub
+                    - ${bucket}${region}
+                    -
+                        bucket: !FindInMap
+                            - Solution
+                            - Template
+                            - S3Bucket
+                        region: !If
+                            - bSingleRegion
+                            - ""
+                            - !Sub -${AWS::Region}
+                KeyPrefix: !FindInMap
+                    - Solution
+                    - Template
+                    - KeyPrefix
+                SolutionId: !FindInMap
+                    - Solution
+                    - Project
+                    - Id
+                SolutionLowerCaseId: !FindInMap
+                    - Solution
+                    - Project
+                    - LowerCaseId
+                ResourcePrefix: !Sub
+                    - ${solutionId}-${stackId}
+                    -
+                        solutionId: !FindInMap
+                            - Solution
+                            - Project
+                            - LowerCaseId
+                        stackId: !Select
+                            - 4
+                            - !Split
+                                - "-"
+                                - !Select
+                                    - 2
+                                    - !Split
+                                        - "/"
+                                        - !Ref AWS::StackId
+                CustomUserAgent: !FindInMap
+                    - Solution
+                    - Project
+                    - CustomUserAgent
+                AnonymizedUsage: !FindInMap
+                    - Send
+                    - AnonymizedUsage
+                    - Data
+                CustomResourcesLambdaArn: !GetAtt CustomResourcesLambda.Arn
+                CustomResourcesRoleName: !Ref CustomResourcesRole
+                AwsSdkLayer: !GetAtt CoreStack.Outputs.AwsSdkLayer
+                CoreLibLayer: !GetAtt CoreStack.Outputs.CoreLibLayer
+                SolutionUuid: !GetAtt CoreStack.Outputs.SolutionUuid
+                IotHost: !GetAtt CoreStack.Outputs.IotHost
+                IotTopic: !GetAtt CoreStack.Outputs.IotTopic
+                #IotThingPolicy: !GetAtt CoreStack.Outputs.IotThingPolicy
+                IngestBucket: !GetAtt CoreStack.Outputs.IngestBucket
+                ProxyBucket: !GetAtt CoreStack.Outputs.ProxyBucket
+                #WebBucket: !GetAtt CoreStack.Outputs.WebBucket
+                #CloudFrontDistributionId: !GetAtt CoreStack.Outputs.CloudFrontDistributionId
+                OpenSearchDomainName: !GetAtt CoreStack.Outputs.OpenSearchDomainName
+                OpenSearchDomainEndpoint: !GetAtt CoreStack.Outputs.OpenSearchDomainEndpoint
+                DefaultAIOptions: !Select
+                    - 0
+                    - !Split
+                        - ")"
+                        - !Select
+                            - 1
+                            - !Split
+                                - "("
+                                - !Ref DefaultAIOptions
+                DefaultMinConfidence: !FindInMap
+                    - AIML
+                    - Options
+                    - DefaultMinConfidence
+                MediaConvertEndpoint: !GetAtt CoreStack.Outputs.MediaConvertEndpoint
+                StartOnObjectCreation: !Ref StartOnObjectCreation
+                AIOptionsS3Key: !FindInMap
+                    - AIML
+                    - Options
+                    - S3Key
+                BlipImageArn: !Ref BlipImageArn
+
+    ################################################################################
+    #
+    # PostProcess
+    # * Attach Backend resources to ApiRole once stack is created
+    # * Create solution manifest
+    # * Register cognito user
+    # * Subscribe to SNS topic
+    # * Send metrics
+    #
+    ################################################################################
+    ApiRolePolicyBackend:
+        Type: AWS::IAM::Policy
+        Properties:
+            Roles:
+                - !GetAtt WebAppStack.Outputs.ApiRole
+            PolicyName: !Sub
+                - ${solutionId}-${stackId}-api-backend
+                -
+                    solutionId: !FindInMap
+                        - Solution
+                        - Project
+                        - LowerCaseId
+                    stackId: !Select
+                        - 4
+                        - !Split
+                            - "-"
+                            - !Select
+                                - 2
+                                - !Split
+                                    - "/"
+                                    - !Ref AWS::StackId
+            PolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    # Step Functions
+                    -
+                        Effect: Allow
+                        Action:
+                            - states:DescribeStateMachine
+                            - states:StartExecution
+                        Resource:
+                            - !GetAtt BackendStack.Outputs.MainStateMachine
+                            - !GetAtt BackendStack.Outputs.IngestMainStateMachine
+                            - !GetAtt BackendStack.Outputs.AnalysisMainStateMachine
+                    -
+                        Effect: Allow
+                        Action:
+                            - states:DescribeExecution
+                            - states:StopExecution
+                        Resource:
+                            - !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:execution:${BackendStack.Outputs.MainStateMachineName}:*
+                            - !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:execution:${BackendStack.Outputs.IngestMainStateMachineName}:*
+                            - !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:execution:${BackendStack.Outputs.AnalysisMainStateMachineName}:*
+                    # DynamoDB - read/write/delete from ingest and analysis tables
+                    -
+                        Effect: Allow
+                        Action:
+                            - dynamodb:Query
+                            - dynamodb:Scan
+                            - dynamodb:UpdateItem
+                            - dynamodb:DeleteItem
+                        Resource:
+                            - !GetAtt BackendStack.Outputs.AnalysisTableArn
+                            - !GetAtt BackendStack.Outputs.IngestTableArn
+                    # DynamoDB - read from ingest indices
+                    -
+                        Effect: Allow
+                        Action:
+                            - dynamodb:Query
+                            - dynamodb:Scan
+                        Resource: !Sub ${BackendStack.Outputs.IngestTableArn}/index/*
+
+    ################################################################################
+    # CustomResourcesRoleMain
+    CustomResourcesRoleMain:
+        Type: AWS::IAM::Policy
+        Properties:
+            Roles:
+                - !Ref CustomResourcesRole
+            PolicyName: !Sub
+                - ${solutionId}-${stackId}-custom-resources-main-stack
+                -
+                    solutionId: !FindInMap
+                        - Solution
+                        - Project
+                        - LowerCaseId
+                    stackId: !Select
+                        - 4
+                        - !Split
+                            - "-"
+                            - !Select
+                                - 2
+                                - !Split
+                                    - "/"
+                                    - !Ref AWS::StackId
+            PolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    # S3 - create solution manifest
+                    -
+                        Effect: Allow
+                        Action: s3:PutObject
+                        Resource: !Sub arn:aws:s3:::${CoreStack.Outputs.WebBucket}/*
+                    # Cognito - register user
+                    -
+                        Effect: Allow
+                        Action: cognito-idp:AdminCreateUser
+                        Resource: !GetAtt WebAppStack.Outputs.CognitoUserPoolArn
+                    # SNS - subscribe user
+                    -
+                        Effect: Allow
+                        Action: sns:Subscribe
+                        Resource: !GetAtt BackendStack.Outputs.SNSTopicArn
+
+    CreateSolutionManifest:
+        DependsOn: CustomResourcesRoleMain
+        Type: Custom::CreateSolutionManifest
+        Properties:
+            ServiceToken: !GetAtt CustomResourcesLambda.Arn
+            Data:
+                Region: !Ref AWS::Region
+                CustomUserAgent: !FindInMap
+                    - Solution
+                    - Project
+                    - CustomUserAgent
+                SolutionId: !FindInMap
+                    - Solution
+                    - Project
+                    - Id
+                Version: !FindInMap
+                    - Solution
+                    - Project
+                    - Version
+                StackName: !Sub
+                    - ${solutionId}-${stackId}
+                    -
+                        solutionId: !FindInMap
+                            - Solution
+                            - Project
+                            - LowerCaseId
+                        stackId: !Select
+                            - 4
+                            - !Split
+                                - "-"
+                                - !Select
+                                    - 2
+                                    - !Split
+                                        - "/"
+                                        - !Ref AWS::StackId
+                # Core stack
+                Ingest:
+                    Bucket: !GetAtt CoreStack.Outputs.IngestBucket
+                Proxy:
+                    Bucket: !GetAtt CoreStack.Outputs.ProxyBucket
+                Web:
+                    Bucket: !GetAtt CoreStack.Outputs.WebBucket
+                S3:
+                    UseAccelerateEndpoint: !GetAtt CoreStack.Outputs.UseAccelerateEndpoint
+                    ExpectedBucketOwner: !Ref AWS::AccountId
+                IotHost: !GetAtt CoreStack.Outputs.IotHost
+                IotTopic: !GetAtt CoreStack.Outputs.IotTopic
+                # Backend stack
+                StateMachines:
+                    Main: !GetAtt BackendStack.Outputs.MainStateMachineName
+                    Ingest: !GetAtt BackendStack.Outputs.IngestMainStateMachineName
+                    Analysis: !GetAtt BackendStack.Outputs.AnalysisMainStateMachineName
+                AIML:
+                    MinConfidence: !GetAtt BackendStack.Outputs.DefaultMinConfidence
+                    Detections: !Split
+                        - ","
+                        - !GetAtt BackendStack.Outputs.DefaultAIOptions
+                # WebApp stack
+                ApiEndpoint: !GetAtt WebAppStack.Outputs.ApiEndpoint
+                Cognito:
+                    UserPoolId: !GetAtt WebAppStack.Outputs.CognitoUserPool
+                    ClientId: !GetAtt WebAppStack.Outputs.CognitoAppClient
+                    IdentityPoolId: !GetAtt WebAppStack.Outputs.CognitoIdentityPool
+                    RedirectUri: !GetAtt WebAppStack.Outputs.HomePage
+                    Group:
+                        Viewer: !FindInMap
+                            - Cognito
+                            - Group
+                            - Viewer
+                        Creator: !FindInMap
+                            - Cognito
+                            - Group
+                            - Creator
+                        Admin: !FindInMap
+                            - Cognito
+                            - Group
+                            - Admin
+                LastUpdated: !GetAtt WebAppStack.Outputs.LastUpdated
+                # Knowledge Graph demo
+                KnowledgeGraph:
+                    Endpoint: !Ref KnowledgeGraphEndpoint
+                    ApiKey: !Ref KnowledgeGraphApiKey
+
+    CognitoRegisterUser:
+        DependsOn: CreateSolutionManifest
+        Type: Custom::RegisterUser
+        Properties:
+            ServiceToken: !GetAtt CustomResourcesLambda.Arn
+            Data:
+                UserPoolId: !GetAtt WebAppStack.Outputs.CognitoUserPool
+                Email: !If
+                    - bEmail
+                    - !Ref Email
+                    - !Ref AWS::NoValue
+                Username: !If
+                    - bUseTemporaryCode
+                    - !Select
+                        - 0
+                        - !Split
+                            - ":"
+                            - !Ref Email
+                    - !If
+                        - bEmail
+                        - !Select
+                            - 0
+                            - !Split
+                                - "@"
+                                - !Ref Email
+                        - !Ref AWS::NoValue
+                TemporaryCode: !If
+                    - bUseTemporaryCode
+                    - !Select
+                        - 1
+                        - !Split
+                            - ":"
+                            - !Ref Email
+                    - !Ref AWS::NoValue
+
+    CognitoUserToGroup:
+        Type: AWS::Cognito::UserPoolUserToGroupAttachment
+        Properties:
+            GroupName: !FindInMap
+                - Cognito
+                - Group
+                - Admin
+            Username: !GetAtt CognitoRegisterUser.Username
+            UserPoolId: !GetAtt WebAppStack.Outputs.CognitoUserPool
+
+    SubscribeSNSTopic:
+        Condition: bEmail
+        DependsOn: CognitoRegisterUser
+        Type: Custom::EmailSubscribe
+        Properties:
+            ServiceToken: !GetAtt CustomResourcesLambda.Arn
+            Data:
+                TopicArn: !GetAtt BackendStack.Outputs.SNSTopicArn
+                EmailList: !Split
+                    - ","
+                    - !Ref Email
+
+    SendConfig:
+        Type: Custom::SendConfig
+        Properties:
+            ServiceToken: !GetAtt CustomResourcesLambda.Arn
+            Data:
+                SolutionId: !FindInMap
+                    - Solution
+                    - Project
+                    - Id
+                Version: !FindInMap
+                    - Solution
+                    - Project
+                    - Version
+                AnonymizedUsage: !FindInMap
+                    - Send
+                    - AnonymizedUsage
+                    - Data
+                OpenSearchCluster: !Ref OpenSearchCluster
+                SolutionUuid: !GetAtt CoreStack.Outputs.SolutionUuid
+
+    ################################################################################
+    #
+    # AppRegistry
+    #
+    ################################################################################
+    Application:
+        Type: AWS::ServiceCatalogAppRegistry::Application
+        Properties:
+            Description: !Sub
+                - Service Catalog application to track and manage all your resources. The Solution ID is ${solutionId} and Solution Version is ${solutionVersion}.      
+                -
+                    solutionId: !FindInMap
+                        - Solution
+                        - Project
+                        - Id
+                    solutionVersion: !FindInMap
+                        - Solution
+                        - Project
+                        - Version
+            Name: !Join
+                - "-"
+                -   - !FindInMap
+                        - Solution
+                        - Project
+                        - AppRegistryApplicationName
+                    - !Ref AWS::Region
+                    - !Ref AWS::AccountId
+                    - !Ref AWS::StackName
+            Tags: {
+                "Solutions:SolutionID": !FindInMap [Solution, Project, Id],
+                "Solutions:SolutionName": !FindInMap [Solution, Project, SolutionName],
+                "Solutions:SolutionVersion": !FindInMap [Solution, Project, Version],
+                "Solutions:ApplicationType": !FindInMap [Solution, Project, ApplicationType],
+            }
+
+    DefaultApplicationAttributes:
+        Type: AWS::ServiceCatalogAppRegistry::AttributeGroup
+        Properties:
+            Name: !Join ["-", [!Ref "AWS::Region", !Ref "AWS::StackName"]]
+            Description: Attribute group for solution information.
+            Attributes: { 
+                "ApplicationType": !FindInMap [Solution, Project, ApplicationType],
+                "Version": !FindInMap [Solution, Project, Version],
+                "SolutionID": !FindInMap [Solution, Project, Id],
+                "SolutionName": !FindInMap [Solution, Project, SolutionName],
+            }
+
+    AppRegistryApplicationAttributeAssociation:
+        Type: AWS::ServiceCatalogAppRegistry::AttributeGroupAssociation
+        Properties:
+            Application: !GetAtt Application.Id
+            AttributeGroup: !GetAtt DefaultApplicationAttributes.Id
+
+    AppRegistryApplicationStackAssociation:
+        Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
+        Properties:
+            Application: !GetAtt Application.Id
+            Resource: !Ref AWS::StackId
+            ResourceType: CFN_STACK
+
+    AppRegistryApplicationStackAssociationCoreStack:
+        Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
+        Properties:
+            Application: !GetAtt Application.Id
+            Resource: !Ref CoreStack
+            ResourceType: CFN_STACK
+
+    AppRegistryApplicationStackAssociationWebAppStack:
+        Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
+        Properties:
+            Application: !GetAtt Application.Id
+            Resource: !Ref WebAppStack
+            ResourceType: CFN_STACK
+
+    AppRegistryApplicationStackAssociationBackendStack:
+        Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
+        Properties:
+            Application: !GetAtt Application.Id
+            Resource: !Ref BackendStack
+            ResourceType: CFN_STACK
+
+Outputs:
+    HomePage:
+        Value: !GetAtt WebAppStack.Outputs.HomePage
+        Description: HomePage
+    ApiEndpoint:
+        Value: !GetAtt WebAppStack.Outputs.ApiEndpoint
+        Description: ApiEndpoint
