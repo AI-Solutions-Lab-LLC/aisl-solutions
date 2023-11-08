@@ -1,0 +1,3524 @@
+{
+  "Description": "(SO0136-sa) - MLOps Workload Orchestrator (Single Account Option). Version v2.2.0",
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [
+        {
+          "Label": {
+            "default": "MLOps Framework Settings"
+          },
+          "Parameters": [
+            "NotificationEmail",
+            "CodeCommitRepoAddress",
+            "ExistingS3Bucket",
+            "ExistingECRRepo",
+            "UseModelRegistry",
+            "CreateModelRegistry",
+            "AllowDetailedErrorMessage"
+          ]
+        }
+      ],
+      "ParameterLabels": {
+        "NotificationEmail": {
+          "default": "Notification Email (Required)"
+        },
+        "CodeCommitRepoAddress": {
+          "default": "CodeCommit Repo URL Address (Optional)"
+        },
+        "ExistingS3Bucket": {
+          "default": "Name of an Existing S3 Bucket (Optional)"
+        },
+        "ExistingECRRepo": {
+          "default": "Name of an Existing Amazon ECR repository (Optional)"
+        },
+        "UseModelRegistry": {
+          "default": "Do you want to use SageMaker Model Registry?"
+        },
+        "CreateModelRegistry": {
+          "default": "Do you want the solution to create a SageMaker's model package group?"
+        },
+        "AllowDetailedErrorMessage": {
+          "default": "Do you want to allow detailed error messages in the APIs response?"
+        }
+      }
+    }
+  },
+  "Parameters": {
+    "NotificationEmail": {
+      "Type": "String",
+      "AllowedPattern": "^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$",
+      "ConstraintDescription": "Please enter an email address with correct format (example@example.com)",
+      "Description": "email for pipeline outcome notifications",
+      "MaxLength": 320,
+      "MinLength": 5
+    },
+    "CodeCommitRepoAddress": {
+      "Type": "String",
+      "AllowedPattern": "^(((https:\\/\\/|ssh:\\/\\/)(git\\-codecommit)\\.[a-zA-Z0-9_.+-]+(amazonaws\\.com\\/)[a-zA-Z0-9-.]+(\\/)[a-zA-Z0-9-.]+(\\/)[a-zA-Z0-9-.]+$)|^$)",
+      "ConstraintDescription": "CodeCommit address must follow the pattern: ssh or https://git-codecommit.REGION.amazonaws.com/version/repos/REPONAME",
+      "Description": "AWS CodeCommit repository clone URL to connect to the framework.",
+      "MaxLength": 320,
+      "MinLength": 0
+    },
+    "ExistingS3Bucket": {
+      "Type": "String",
+      "AllowedPattern": "((?=^.{3,63}$)(?!^(\\d+\\.)+\\d+$)(^(([a-z0-9]|[a-z0-9][a-z0-9\\-]*[a-z0-9])\\.)*([a-z0-9]|[a-z0-9][a-z0-9\\-]*[a-z0-9])$)|^$)",
+      "Description": "Name of existing S3 bucket to be used for ML assets. S3 Bucket must be in the same region as the deployed stack, and has versioning enabled. If not provided, a new S3 bucket will be created.",
+      "MaxLength": 63,
+      "MinLength": 0
+    },
+    "ExistingECRRepo": {
+      "Type": "String",
+      "AllowedPattern": "((?:[a-z0-9]+(?:[._-][a-z0-9]+)*/)*[a-z0-9]+(?:[._-][a-z0-9]+)*|^$)",
+      "Description": "Name of existing Amazon ECR repository for custom algorithms. If not provided, a new ECR repo will be created.",
+      "MaxLength": 63,
+      "MinLength": 0
+    },
+    "UseModelRegistry": {
+      "Type": "String",
+      "Default": "No",
+      "AllowedValues": [
+        "Yes",
+        "No"
+      ],
+      "Description": "Will Amazon SageMaker's Model Registry be used to provision models?"
+    },
+    "CreateModelRegistry": {
+      "Type": "String",
+      "Default": "No",
+      "AllowedValues": [
+        "Yes",
+        "No"
+      ],
+      "Description": "Do you want the solution to create the SageMaker Model Package Group Name (i.e., Model Registry)"
+    },
+    "AllowDetailedErrorMessage": {
+      "Type": "String",
+      "Default": "Yes",
+      "AllowedValues": [
+        "Yes",
+        "No"
+      ],
+      "Description": "Allow including a detailed message of any server-side errors in the API call's response"
+    }
+  },
+  "Conditions": {
+    "GitAddressProvided": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "CodeCommitRepoAddress"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "S3BucketProvided": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "ExistingS3Bucket"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "ECRProvided": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "ExistingECRRepo"
+            },
+            ""
+          ]
+        }
+      ]
+    },
+    "CreateModelRegistryCondition": {
+      "Fn::Equals": [
+        {
+          "Ref": "CreateModelRegistry"
+        },
+        "Yes"
+      ]
+    },
+    "CreateS3Bucket": {
+      "Fn::Equals": [
+        {
+          "Ref": "ExistingS3Bucket"
+        },
+        ""
+      ]
+    },
+    "CreateECRRepo": {
+      "Fn::Equals": [
+        {
+          "Ref": "ExistingECRRepo"
+        },
+        ""
+      ]
+    },
+    "AnonymizedDatatoAWS": {
+      "Fn::Equals": [
+        {
+          "Fn::FindInMap": [
+            "AnonymizedData",
+            "SendAnonymizedData",
+            "Data"
+          ]
+        },
+        "Yes"
+      ]
+    }
+  },
+  "Resources": {
+    "accessLogs751B1465": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "ObjectWriter"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        }
+      },
+      "UpdateReplacePolicy": "Retain",
+      "DeletionPolicy": "Retain",
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W35",
+              "reason": "This is the access bucket"
+            }
+          ]
+        }
+      }
+    },
+    "accessLogsPolicy8C9988FF": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "accessLogs751B1465"
+        },
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "s3:*",
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              },
+              "Effect": "Deny",
+              "Principal": {
+                "AWS": "*"
+              },
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "accessLogs751B1465",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "accessLogs751B1465",
+                          "Arn"
+                        ]
+                      },
+                      "/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": "s3:PutObject",
+              "Condition": {
+                "ArnLike": {
+                  "aws:SourceArn": [
+                    {
+                      "Fn::Join": [
+                        "",
+                        [
+                          "arn:",
+                          {
+                            "Ref": "AWS::Partition"
+                          },
+                          ":s3:::",
+                          {
+                            "Fn::If": [
+                              "S3BucketProvided",
+                              {
+                                "Ref": "ExistingS3Bucket"
+                              },
+                              {
+                                "Ref": "pipelineassets8069ce4301fc4a368f47e3df0a92061cB86835A4"
+                              }
+                            ]
+                          }
+                        ]
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9",
+                        "Arn"
+                      ]
+                    }
+                  ]
+                },
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                }
+              },
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "logging.s3.amazonaws.com"
+              },
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    {
+                      "Fn::GetAtt": [
+                        "accessLogs751B1465",
+                        "Arn"
+                      ]
+                    },
+                    "/*"
+                  ]
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      }
+    },
+    "pipelineassets8069ce4301fc4a368f47e3df0a92061cB86835A4": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "LoggingConfiguration": {
+          "DestinationBucketName": {
+            "Ref": "accessLogs751B1465"
+          },
+          "LogFilePrefix": "assets_bucket_access_logs"
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        }
+      },
+      "UpdateReplacePolicy": "Retain",
+      "DeletionPolicy": "Retain",
+      "Condition": "CreateS3Bucket"
+    },
+    "pipelineassets8069ce4301fc4a368f47e3df0a92061cPolicy4D6CEFDF": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "pipelineassets8069ce4301fc4a368f47e3df0a92061cB86835A4"
+        },
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "s3:*",
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              },
+              "Effect": "Deny",
+              "Principal": {
+                "AWS": "*"
+              },
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "pipelineassets8069ce4301fc4a368f47e3df0a92061cB86835A4",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "pipelineassets8069ce4301fc4a368f47e3df0a92061cB86835A4",
+                          "Arn"
+                        ]
+                      },
+                      "/*"
+                    ]
+                  ]
+                }
+              ]
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      },
+      "Condition": "CreateS3Bucket"
+    },
+    "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "LoggingConfiguration": {
+          "DestinationBucketName": {
+            "Ref": "accessLogs751B1465"
+          },
+          "LogFilePrefix": "blueprint-repository-b915a55a-6daf-477e-af90-f00a4e52f3b2"
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        }
+      },
+      "UpdateReplacePolicy": "Retain",
+      "DeletionPolicy": "Retain"
+    },
+    "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2Policy8EF7F0CD": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9"
+        },
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "s3:*",
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              },
+              "Effect": "Deny",
+              "Principal": {
+                "AWS": "*"
+              },
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9",
+                          "Arn"
+                        ]
+                      },
+                      "/*"
+                    ]
+                  ]
+                }
+              ]
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      }
+    },
+    "ECRRepoC36DC9E6": {
+      "Type": "AWS::ECR::Repository",
+      "Properties": {
+        "ImageScanningConfiguration": {
+          "ScanOnPush": true
+        }
+      },
+      "UpdateReplacePolicy": "Retain",
+      "DeletionPolicy": "Retain",
+      "Condition": "CreateECRRepo"
+    },
+    "MLOpsNotificationsTopic6E63EA9B": {
+      "Type": "AWS::SNS::Topic",
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W47",
+              "reason": "This SNS topic does not contain any sensitive information."
+            }
+          ]
+        }
+      }
+    },
+    "MLOpsNotificationsTopicTokenSubscription144FE5F73": {
+      "Type": "AWS::SNS::Subscription",
+      "Properties": {
+        "Protocol": "email",
+        "TopicArn": {
+          "Ref": "MLOpsNotificationsTopic6E63EA9B"
+        },
+        "Endpoint": {
+          "Ref": "NotificationEmail"
+        }
+      }
+    },
+    "MLOpsNotificationsTopicPolicy2A28E2A5": {
+      "Type": "AWS::SNS::TopicPolicy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sns:Publish",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "events.amazonaws.com"
+              },
+              "Resource": {
+                "Ref": "MLOpsNotificationsTopic6E63EA9B"
+              },
+              "Sid": "0"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Topics": [
+          {
+            "Ref": "MLOpsNotificationsTopic6E63EA9B"
+          }
+        ]
+      }
+    },
+    "SolutionHelperServiceRoleB95702BC": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition"
+                },
+                ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    "SolutionHelperC369AAA8": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "S3Bucket": {
+            "Fn::Sub": "solutions-${AWS::Region}"
+          },
+          "S3Key": "mlops-workload-orchestrator/v2.2.0/asset4a67e5c6bb3ebcf9a75d246eca85ad318d5f7aa69bcc15a5e1fa5fd1020ef4b3.zip"
+        },
+        "Role": {
+          "Fn::GetAtt": [
+            "SolutionHelperServiceRoleB95702BC",
+            "Arn"
+          ]
+        },
+        "Environment": {
+          "Variables": {
+            "AWS_SDK_USER_AGENT": "{\"user_agent_extra\": \"AwsSolution/SO0136/v2.2.0\"}",
+            "PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION": "python"
+          }
+        },
+        "Handler": "lambda_function.handler",
+        "Runtime": "python3.10",
+        "Timeout": 300
+      },
+      "DependsOn": [
+        "SolutionHelperServiceRoleB95702BC"
+      ],
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W89",
+              "reason": "The lambda function does not need to be attached to a vpc."
+            },
+            {
+              "id": "W58",
+              "reason": "The lambda functions role already has permissions to write cloudwatch logs"
+            },
+            {
+              "id": "W92",
+              "reason": "The lambda function does need to define ReservedConcurrentExecutions"
+            }
+          ]
+        }
+      }
+    },
+    "CreateUniqueID": {
+      "Type": "Custom::CreateUUID",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "SolutionHelperC369AAA8",
+            "Arn"
+          ]
+        },
+        "Resource": "UUID",
+        "CreateModelRegistry": {
+          "Ref": "CreateModelRegistry"
+        }
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "SageMakerModelRegistry": {
+      "Type": "AWS::SageMaker::ModelPackageGroup",
+      "Properties": {
+        "ModelPackageGroupName": {
+          "Fn::Join": [
+            "",
+            [
+              "mlops-model-registry-",
+              {
+                "Fn::Select": [
+                  0,
+                  {
+                    "Fn::Split": [
+                      "-",
+                      {
+                        "Fn::GetAtt": [
+                          "CreateUniqueID",
+                          "UUID"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        "ModelPackageGroupDescription": "SageMaker model package group name (model registry) for mlops",
+        "Tags": [
+          {
+            "Key": "stack-name",
+            "Value": {
+              "Ref": "AWS::StackName"
+            }
+          }
+        ]
+      },
+      "DependsOn": [
+        "CreateUniqueID"
+      ],
+      "UpdateReplacePolicy": "Retain",
+      "DeletionPolicy": "Retain",
+      "Condition": "CreateModelRegistryCondition"
+    },
+    "CustomResourceLambdaServiceRole757E6AFA": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition"
+                },
+                ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    "CustomResourceLambdaServiceRoleDefaultPolicy2AB589DB": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "s3:GetObject",
+                "s3:ListBucket"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":s3:::solutions-",
+                      {
+                        "Ref": "AWS::Region"
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":s3:::solutions-",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "s3:DeleteObject*",
+                "s3:PutObject",
+                "s3:PutObjectLegalHold",
+                "s3:PutObjectRetention",
+                "s3:PutObjectTagging",
+                "s3:PutObjectVersionTagging",
+                "s3:Abort*"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9",
+                          "Arn"
+                        ]
+                      },
+                      "/*"
+                    ]
+                  ]
+                }
+              ]
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "CustomResourceLambdaServiceRoleDefaultPolicy2AB589DB",
+        "Roles": [
+          {
+            "Ref": "CustomResourceLambdaServiceRole757E6AFA"
+          }
+        ]
+      }
+    },
+    "CustomResourceLambda42C1FE6E": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "S3Bucket": {
+            "Fn::Sub": "solutions-${AWS::Region}"
+          },
+          "S3Key": "mlops-workload-orchestrator/v2.2.0/assetc62d7a732a37f118bc15645062f5e676a6e1f36acbd4efdd9109799f00ada4b6.zip"
+        },
+        "Role": {
+          "Fn::GetAtt": [
+            "CustomResourceLambdaServiceRole757E6AFA",
+            "Arn"
+          ]
+        },
+        "Environment": {
+          "Variables": {
+            "SOURCE_BUCKET": {
+              "Fn::Join": [
+                "",
+                [
+                  "solutions-",
+                  {
+                    "Ref": "AWS::Region"
+                  }
+                ]
+              ]
+            },
+            "FILE_KEY": "mlops-workload-orchestrator/v2.2.0/blueprints.zip",
+            "DESTINATION_BUCKET": {
+              "Ref": "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9"
+            },
+            "LOG_LEVEL": "INFO",
+            "AWS_SDK_USER_AGENT": "{\"user_agent_extra\": \"AwsSolution/SO0136/v2.2.0\"}",
+            "PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION": "python"
+          }
+        },
+        "Handler": "index.on_event",
+        "MemorySize": 256,
+        "Runtime": "python3.10",
+        "Timeout": 600
+      },
+      "DependsOn": [
+        "CustomResourceLambdaServiceRoleDefaultPolicy2AB589DB",
+        "CustomResourceLambdaServiceRole757E6AFA"
+      ],
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W89",
+              "reason": "The lambda function does not need to be attached to a vpc."
+            },
+            {
+              "id": "W58",
+              "reason": "The lambda functions role already has permissions to write cloudwatch logs"
+            },
+            {
+              "id": "W92",
+              "reason": "The lambda function does need to define ReservedConcurrentExecutions"
+            }
+          ]
+        }
+      }
+    },
+    "CustomResourceCopyAssets": {
+      "Type": "AWS::CloudFormation::CustomResource",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "CustomResourceLambda42C1FE6E",
+            "Arn"
+          ]
+        }
+      },
+      "DependsOn": [
+        "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2Policy8EF7F0CD",
+        "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9"
+      ],
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "mlopscloudformationrole867810B0": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "cloudformation.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      }
+    },
+    "lambdaOrchestratorPolicy1A0EFCB1": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "cloudformation:CreateStack",
+                "cloudformation:DeleteStack",
+                "cloudformation:UpdateStack",
+                "cloudformation:DescribeStacks",
+                "cloudformation:ListStackResources"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":cloudformation:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":stack/mlops-pipeline*/*"
+                  ]
+                ]
+              }
+            },
+            {
+              "Action": [
+                "iam:CreateRole",
+                "iam:DeleteRole",
+                "iam:DeleteRolePolicy",
+                "iam:GetRole",
+                "iam:GetRolePolicy",
+                "iam:PassRole",
+                "iam:PutRolePolicy",
+                "iam:AttachRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:UntagRole",
+                "iam:TagRole"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":iam::",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":role/mlops-pipeline*"
+                  ]
+                ]
+              }
+            },
+            {
+              "Action": [
+                "ecr:CreateRepository",
+                "ecr:DescribeRepositories"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":ecr:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":repository/",
+                    {
+                      "Fn::If": [
+                        "ECRProvided",
+                        {
+                          "Ref": "ExistingECRRepo"
+                        },
+                        {
+                          "Ref": "ECRRepoC36DC9E6"
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              }
+            },
+            {
+              "Action": [
+                "codebuild:CreateProject",
+                "codebuild:DeleteProject",
+                "codebuild:BatchGetProjects"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":codebuild:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":project/ContainerFactory*"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":codebuild:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":project/VerifySagemaker*"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":codebuild:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":report-group/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "lambda:CreateFunction",
+                "lambda:DeleteFunction",
+                "lambda:InvokeFunction",
+                "lambda:PublishLayerVersion",
+                "lambda:DeleteLayerVersion",
+                "lambda:GetLayerVersion",
+                "lambda:GetFunctionConfiguration",
+                "lambda:GetFunction",
+                "lambda:AddPermission",
+                "lambda:RemovePermission",
+                "lambda:UpdateFunctionConfiguration",
+                "lambda:TagResource"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":lambda:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":layer:*"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":lambda:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":function:*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "s3:GetObject",
+                "s3:ListBucket"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":s3:::",
+                      {
+                        "Fn::If": [
+                          "S3BucketProvided",
+                          {
+                            "Ref": "ExistingS3Bucket"
+                          },
+                          {
+                            "Ref": "pipelineassets8069ce4301fc4a368f47e3df0a92061cB86835A4"
+                          }
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9",
+                          "Arn"
+                        ]
+                      },
+                      "/*"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":s3:::",
+                      {
+                        "Fn::If": [
+                          "S3BucketProvided",
+                          {
+                            "Ref": "ExistingS3Bucket"
+                          },
+                          {
+                            "Ref": "pipelineassets8069ce4301fc4a368f47e3df0a92061cB86835A4"
+                          }
+                        ]
+                      },
+                      "/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "servicecatalog:CreateApplication",
+                "servicecatalog:GetApplication",
+                "servicecatalog:UpdateApplication",
+                "servicecatalog:DeleteApplication",
+                "servicecatalog:CreateAttributeGroup",
+                "servicecatalog:GetAttributeGroup",
+                "servicecatalog:UpdateAttributeGroup",
+                "servicecatalog:DeleteAttributeGroup",
+                "servicecatalog:AssociateResource",
+                "servicecatalog:DisassociateResource",
+                "servicecatalog:AssociateAttributeGroup",
+                "servicecatalog:DisassociateAttributeGroup",
+                "servicecatalog:TagResource"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":servicecatalog:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":/applications/*"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":servicecatalog:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":/attribute-groups/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "codepipeline:CreatePipeline",
+                "codepipeline:UpdatePipeline",
+                "codepipeline:DeletePipeline",
+                "codepipeline:GetPipeline",
+                "codepipeline:GetPipelineState",
+                "codepipeline:TagResource",
+                "codepipeline:UntagResource"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":codepipeline:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":mlops-pipeline*"
+                  ]
+                ]
+              }
+            },
+            {
+              "Action": [
+                "apigateway:POST",
+                "apigateway:PATCH",
+                "apigateway:DELETE",
+                "apigateway:GET",
+                "apigateway:PUT"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":apigateway:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "::/restapis/*"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":apigateway:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "::/restapis"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":apigateway:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "::/account"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":apigateway:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "::/usageplans"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":apigateway:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "::/usageplans/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "logs:CreateLogGroup",
+                "logs:DescribeLogGroups"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":logs:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":log-group:*"
+                  ]
+                ]
+              }
+            },
+            {
+              "Action": [
+                "s3:CreateBucket",
+                "s3:PutEncryptionConfiguration",
+                "s3:PutBucketVersioning",
+                "s3:PutBucketPublicAccessBlock",
+                "s3:PutBucketLogging",
+                "s3:GetBucketPolicy",
+                "s3:PutBucketPolicy",
+                "s3:DeleteBucketPolicy"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":s3:::*"
+                  ]
+                ]
+              }
+            },
+            {
+              "Action": "s3:PutObject",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":s3:::",
+                    {
+                      "Fn::If": [
+                        "S3BucketProvided",
+                        {
+                          "Ref": "ExistingS3Bucket"
+                        },
+                        {
+                          "Ref": "pipelineassets8069ce4301fc4a368f47e3df0a92061cB86835A4"
+                        }
+                      ]
+                    },
+                    "/*"
+                  ]
+                ]
+              }
+            },
+            {
+              "Action": [
+                "sns:CreateTopic",
+                "sns:DeleteTopic",
+                "sns:Subscribe",
+                "sns:Unsubscribe",
+                "sns:GetTopicAttributes",
+                "sns:SetTopicAttributes"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":sns:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":mlops-pipeline*-*PipelineNotification*"
+                  ]
+                ]
+              }
+            },
+            {
+              "Action": [
+                "events:PutRule",
+                "events:DescribeRule",
+                "events:PutTargets",
+                "events:RemoveTargets",
+                "events:DeleteRule",
+                "events:PutEvents"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":events:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":rule/*"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":events:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":event-bus/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "sagemaker:CreateModelCard",
+                "sagemaker:DescribeModelCard",
+                "sagemaker:UpdateModelCard",
+                "sagemaker:DeleteModelCard",
+                "sagemaker:CreateModelCardExportJob",
+                "sagemaker:DescribeModelCardExportJob",
+                "sagemaker:DescribeModel",
+                "sagemaker:DescribeTrainingJob"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":sagemaker:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":model-card/*"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":sagemaker:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":model/*"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":sagemaker:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":training-job/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "sagemaker:ListModelCards",
+                "sagemaker:Search"
+              ],
+              "Effect": "Allow",
+              "Resource": "*"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "lambdaOrchestratorPolicy1A0EFCB1",
+        "Roles": [
+          {
+            "Ref": "mlopscloudformationrole867810B0"
+          },
+          {
+            "Ref": "PipelineOrchestrationLambdaFunctionServiceRoleE64D6F74"
+          }
+        ]
+      },
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W76",
+              "reason": "A complex IAM policy is required for this resource."
+            },
+            {
+              "id": "W12",
+              "reason": "sagemaker:ListModelCards and sagemaker:Search can not have a restricted resource."
+            }
+          ]
+        }
+      }
+    },
+    "sagemakerlayer1589FAB3": {
+      "Type": "AWS::Lambda::LayerVersion",
+      "Properties": {
+        "Content": {
+          "S3Bucket": {
+            "Ref": "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9"
+          },
+          "S3Key": "blueprints/lambdas/sagemaker_layer.zip"
+        },
+        "CompatibleRuntimes": [
+          "python3.9",
+          "python3.10"
+        ]
+      },
+      "DependsOn": [
+        "CustomResourceCopyAssets"
+      ]
+    },
+    "PipelineOrchestrationLambdaFunctionServiceRoleE64D6F74": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Policies": [
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Join": [
+                      "",
+                      [
+                        "arn:",
+                        {
+                          "Ref": "AWS::Partition"
+                        },
+                        ":logs:",
+                        {
+                          "Ref": "AWS::Region"
+                        },
+                        ":",
+                        {
+                          "Ref": "AWS::AccountId"
+                        },
+                        ":log-group:/aws/lambda/*"
+                      ]
+                    ]
+                  }
+                }
+              ],
+              "Version": "2012-10-17"
+            },
+            "PolicyName": "LambdaFunctionServiceRolePolicy"
+          }
+        ]
+      }
+    },
+    "PipelineOrchestrationLambdaFunctionServiceRoleDefaultPolicy3DDDD50A": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "xray:PutTraceSegments",
+                "xray:PutTelemetryRecords"
+              ],
+              "Effect": "Allow",
+              "Resource": "*"
+            },
+            {
+              "Action": [
+                "s3:GetObject*",
+                "s3:GetBucket*",
+                "s3:List*"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9",
+                          "Arn"
+                        ]
+                      },
+                      "/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": "iam:passrole",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "mlopscloudformationrole867810B0",
+                  "Arn"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "PipelineOrchestrationLambdaFunctionServiceRoleDefaultPolicy3DDDD50A",
+        "Roles": [
+          {
+            "Ref": "PipelineOrchestrationLambdaFunctionServiceRoleE64D6F74"
+          }
+        ]
+      },
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W12",
+              "reason": "Lambda needs the following minimum required permissions to send trace data to X-Ray and access ENIs in a VPC."
+            }
+          ]
+        }
+      }
+    },
+    "PipelineOrchestrationLambdaFunction7EE5E931": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "S3Bucket": {
+            "Fn::Sub": "solutions-${AWS::Region}"
+          },
+          "S3Key": "mlops-workload-orchestrator/v2.2.0/asset94f8c52c0fdc5dc599ef9abd396cbe9dbd49258c3ff72416528c6c1e110179c8.zip"
+        },
+        "Role": {
+          "Fn::GetAtt": [
+            "PipelineOrchestrationLambdaFunctionServiceRoleE64D6F74",
+            "Arn"
+          ]
+        },
+        "Environment": {
+          "Variables": {
+            "BLUEPRINT_BUCKET_URL": {
+              "Fn::GetAtt": [
+                "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9",
+                "RegionalDomainName"
+              ]
+            },
+            "BLUEPRINT_BUCKET": {
+              "Ref": "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9"
+            },
+            "ACCESS_BUCKET": {
+              "Ref": "accessLogs751B1465"
+            },
+            "ASSETS_BUCKET": {
+              "Fn::If": [
+                "S3BucketProvided",
+                {
+                  "Ref": "ExistingS3Bucket"
+                },
+                {
+                  "Ref": "pipelineassets8069ce4301fc4a368f47e3df0a92061cB86835A4"
+                }
+              ]
+            },
+            "CFN_ROLE_ARN": {
+              "Fn::GetAtt": [
+                "mlopscloudformationrole867810B0",
+                "Arn"
+              ]
+            },
+            "PIPELINE_STACK_NAME": "mlops-pipeline",
+            "NOTIFICATION_EMAIL": {
+              "Ref": "NotificationEmail"
+            },
+            "REGION": {
+              "Ref": "AWS::Region"
+            },
+            "IS_MULTI_ACCOUNT": "False",
+            "USE_MODEL_REGISTRY": {
+              "Ref": "UseModelRegistry"
+            },
+            "ALLOW_DETAILED_ERROR_MESSAGE": {
+              "Ref": "AllowDetailedErrorMessage"
+            },
+            "MLOPS_NOTIFICATIONS_SNS_TOPIC": {
+              "Ref": "MLOpsNotificationsTopic6E63EA9B"
+            },
+            "ECR_REPO_NAME": {
+              "Fn::If": [
+                "ECRProvided",
+                {
+                  "Ref": "ExistingECRRepo"
+                },
+                {
+                  "Ref": "ECRRepoC36DC9E6"
+                }
+              ]
+            },
+            "ECR_REPO_ARN": {
+              "Fn::If": [
+                "ECRProvided",
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":ecr:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":repository/",
+                      {
+                        "Ref": "ExistingECRRepo"
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "ECRRepoC36DC9E6",
+                    "Arn"
+                  ]
+                }
+              ]
+            },
+            "LOG_LEVEL": "DEBUG",
+            "AWS_SDK_USER_AGENT": "{\"user_agent_extra\": \"AwsSolution/SO0136/v2.2.0\"}",
+            "PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION": "python"
+          }
+        },
+        "Handler": "index.handler",
+        "Layers": [
+          {
+            "Ref": "sagemakerlayer1589FAB3"
+          }
+        ],
+        "Runtime": "python3.10",
+        "Timeout": 600,
+        "TracingConfig": {
+          "Mode": "Active"
+        }
+      },
+      "DependsOn": [
+        "PipelineOrchestrationLambdaFunctionServiceRoleDefaultPolicy3DDDD50A",
+        "PipelineOrchestrationLambdaFunctionServiceRoleE64D6F74"
+      ],
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W89",
+              "reason": "The lambda function does not need to be attached to a vpc."
+            },
+            {
+              "id": "W58",
+              "reason": "The lambda functions role already has permissions to write cloudwatch logs"
+            },
+            {
+              "id": "W92",
+              "reason": "The lambda function does need to define ReservedConcurrentExecutions"
+            }
+          ]
+        }
+      }
+    },
+    "PipelineOrchestrationApiAccessLogGroup1BD28E64": {
+      "Type": "AWS::Logs::LogGroup",
+      "UpdateReplacePolicy": "Retain",
+      "DeletionPolicy": "Retain",
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W86",
+              "reason": "Retention period for CloudWatchLogs LogGroups are set to 'Never Expire' to preserve customer data indefinitely"
+            },
+            {
+              "id": "W84",
+              "reason": "By default CloudWatchLogs LogGroups data is encrypted using the CloudWatch server-side encryption keys (AWS Managed Keys)"
+            }
+          ]
+        }
+      }
+    },
+    "PipelineOrchestrationLambdaRestApi0420670E": {
+      "Type": "AWS::ApiGateway::RestApi",
+      "Properties": {
+        "EndpointConfiguration": {
+          "Types": [
+            "EDGE"
+          ]
+        },
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::StackName"
+              },
+              "-orchestrator"
+            ]
+          ]
+        }
+      }
+    },
+    "PipelineOrchestrationLambdaRestApiDeployment00B8E19Ccf7ae3fdfa9ecfc70d8ac33cb637e684": {
+      "Type": "AWS::ApiGateway::Deployment",
+      "Properties": {
+        "RestApiId": {
+          "Ref": "PipelineOrchestrationLambdaRestApi0420670E"
+        },
+        "Description": "Automatically created by the RestApi construct"
+      },
+      "DependsOn": [
+        "PipelineOrchestrationLambdaRestApipipelinestatusPOSTBECDEDF1",
+        "PipelineOrchestrationLambdaRestApipipelinestatusE49CAC82",
+        "PipelineOrchestrationLambdaRestApiprovisionpipelinePOSTFD9D81F6",
+        "PipelineOrchestrationLambdaRestApiprovisionpipelineA402C4B8"
+      ],
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W45",
+              "reason": "ApiGateway has AccessLogging enabled in AWS::ApiGateway::Stage resource, but cfn_nag checkes for it in AWS::ApiGateway::Deployment resource"
+            }
+          ]
+        }
+      }
+    },
+    "PipelineOrchestrationLambdaRestApiDeploymentStageprodAD71884A": {
+      "Type": "AWS::ApiGateway::Stage",
+      "Properties": {
+        "RestApiId": {
+          "Ref": "PipelineOrchestrationLambdaRestApi0420670E"
+        },
+        "AccessLogSetting": {
+          "DestinationArn": {
+            "Fn::GetAtt": [
+              "PipelineOrchestrationApiAccessLogGroup1BD28E64",
+              "Arn"
+            ]
+          },
+          "Format": "{\"requestId\":\"$context.requestId\",\"ip\":\"$context.identity.sourceIp\",\"user\":\"$context.identity.user\",\"caller\":\"$context.identity.caller\",\"requestTime\":\"$context.requestTime\",\"httpMethod\":\"$context.httpMethod\",\"resourcePath\":\"$context.resourcePath\",\"status\":\"$context.status\",\"protocol\":\"$context.protocol\",\"responseLength\":\"$context.responseLength\"}"
+        },
+        "DeploymentId": {
+          "Ref": "PipelineOrchestrationLambdaRestApiDeployment00B8E19Ccf7ae3fdfa9ecfc70d8ac33cb637e684"
+        },
+        "MethodSettings": [
+          {
+            "DataTraceEnabled": false,
+            "HttpMethod": "*",
+            "LoggingLevel": "INFO",
+            "ResourcePath": "/*"
+          }
+        ],
+        "StageName": "prod",
+        "TracingEnabled": true
+      }
+    },
+    "PipelineOrchestrationLambdaRestApiprovisionpipelineA402C4B8": {
+      "Type": "AWS::ApiGateway::Resource",
+      "Properties": {
+        "ParentId": {
+          "Fn::GetAtt": [
+            "PipelineOrchestrationLambdaRestApi0420670E",
+            "RootResourceId"
+          ]
+        },
+        "PathPart": "provisionpipeline",
+        "RestApiId": {
+          "Ref": "PipelineOrchestrationLambdaRestApi0420670E"
+        }
+      }
+    },
+    "PipelineOrchestrationLambdaRestApiprovisionpipelinePOSTApiPermissionmlopsworkloadorchestratorsingleaccountPipelineOrchestrationLambdaRestApi62758C80POSTprovisionpipeline9A4D8410": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "PipelineOrchestrationLambdaFunction7EE5E931",
+            "Arn"
+          ]
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition"
+              },
+              ":execute-api:",
+              {
+                "Ref": "AWS::Region"
+              },
+              ":",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":",
+              {
+                "Ref": "PipelineOrchestrationLambdaRestApi0420670E"
+              },
+              "/",
+              {
+                "Ref": "PipelineOrchestrationLambdaRestApiDeploymentStageprodAD71884A"
+              },
+              "/POST/provisionpipeline"
+            ]
+          ]
+        }
+      }
+    },
+    "PipelineOrchestrationLambdaRestApiprovisionpipelinePOSTApiPermissionTestmlopsworkloadorchestratorsingleaccountPipelineOrchestrationLambdaRestApi62758C80POSTprovisionpipeline3F427143": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "PipelineOrchestrationLambdaFunction7EE5E931",
+            "Arn"
+          ]
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition"
+              },
+              ":execute-api:",
+              {
+                "Ref": "AWS::Region"
+              },
+              ":",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":",
+              {
+                "Ref": "PipelineOrchestrationLambdaRestApi0420670E"
+              },
+              "/test-invoke-stage/POST/provisionpipeline"
+            ]
+          ]
+        }
+      }
+    },
+    "PipelineOrchestrationLambdaRestApiprovisionpipelinePOSTFD9D81F6": {
+      "Type": "AWS::ApiGateway::Method",
+      "Properties": {
+        "HttpMethod": "POST",
+        "ResourceId": {
+          "Ref": "PipelineOrchestrationLambdaRestApiprovisionpipelineA402C4B8"
+        },
+        "RestApiId": {
+          "Ref": "PipelineOrchestrationLambdaRestApi0420670E"
+        },
+        "AuthorizationType": "AWS_IAM",
+        "Integration": {
+          "IntegrationHttpMethod": "POST",
+          "Type": "AWS_PROXY",
+          "Uri": {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition"
+                },
+                ":apigateway:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":lambda:path/2015-03-31/functions/",
+                {
+                  "Fn::GetAtt": [
+                    "PipelineOrchestrationLambdaFunction7EE5E931",
+                    "Arn"
+                  ]
+                },
+                "/invocations"
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "PipelineOrchestrationLambdaRestApipipelinestatusE49CAC82": {
+      "Type": "AWS::ApiGateway::Resource",
+      "Properties": {
+        "ParentId": {
+          "Fn::GetAtt": [
+            "PipelineOrchestrationLambdaRestApi0420670E",
+            "RootResourceId"
+          ]
+        },
+        "PathPart": "pipelinestatus",
+        "RestApiId": {
+          "Ref": "PipelineOrchestrationLambdaRestApi0420670E"
+        }
+      }
+    },
+    "PipelineOrchestrationLambdaRestApipipelinestatusPOSTApiPermissionmlopsworkloadorchestratorsingleaccountPipelineOrchestrationLambdaRestApi62758C80POSTpipelinestatus8210E123": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "PipelineOrchestrationLambdaFunction7EE5E931",
+            "Arn"
+          ]
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition"
+              },
+              ":execute-api:",
+              {
+                "Ref": "AWS::Region"
+              },
+              ":",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":",
+              {
+                "Ref": "PipelineOrchestrationLambdaRestApi0420670E"
+              },
+              "/",
+              {
+                "Ref": "PipelineOrchestrationLambdaRestApiDeploymentStageprodAD71884A"
+              },
+              "/POST/pipelinestatus"
+            ]
+          ]
+        }
+      }
+    },
+    "PipelineOrchestrationLambdaRestApipipelinestatusPOSTApiPermissionTestmlopsworkloadorchestratorsingleaccountPipelineOrchestrationLambdaRestApi62758C80POSTpipelinestatus734E87F7": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "PipelineOrchestrationLambdaFunction7EE5E931",
+            "Arn"
+          ]
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition"
+              },
+              ":execute-api:",
+              {
+                "Ref": "AWS::Region"
+              },
+              ":",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":",
+              {
+                "Ref": "PipelineOrchestrationLambdaRestApi0420670E"
+              },
+              "/test-invoke-stage/POST/pipelinestatus"
+            ]
+          ]
+        }
+      }
+    },
+    "PipelineOrchestrationLambdaRestApipipelinestatusPOSTBECDEDF1": {
+      "Type": "AWS::ApiGateway::Method",
+      "Properties": {
+        "HttpMethod": "POST",
+        "ResourceId": {
+          "Ref": "PipelineOrchestrationLambdaRestApipipelinestatusE49CAC82"
+        },
+        "RestApiId": {
+          "Ref": "PipelineOrchestrationLambdaRestApi0420670E"
+        },
+        "AuthorizationType": "AWS_IAM",
+        "Integration": {
+          "IntegrationHttpMethod": "POST",
+          "Type": "AWS_PROXY",
+          "Uri": {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition"
+                },
+                ":apigateway:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":lambda:path/2015-03-31/functions/",
+                {
+                  "Fn::GetAtt": [
+                    "PipelineOrchestrationLambdaFunction7EE5E931",
+                    "Arn"
+                  ]
+                },
+                "/invocations"
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "PipelineOrchestrationLambdaRestApiUsagePlan06C27F0E": {
+      "Type": "AWS::ApiGateway::UsagePlan",
+      "Properties": {
+        "ApiStages": [
+          {
+            "ApiId": {
+              "Ref": "PipelineOrchestrationLambdaRestApi0420670E"
+            },
+            "Stage": {
+              "Ref": "PipelineOrchestrationLambdaRestApiDeploymentStageprodAD71884A"
+            },
+            "Throttle": {}
+          }
+        ]
+      }
+    },
+    "PipelineOrchestrationLambdaRestApiCloudWatchRole6F4B9723": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "apigateway.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Policies": [
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:DescribeLogGroups",
+                    "logs:DescribeLogStreams",
+                    "logs:PutLogEvents",
+                    "logs:GetLogEvents",
+                    "logs:FilterLogEvents"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Join": [
+                      "",
+                      [
+                        "arn:",
+                        {
+                          "Ref": "AWS::Partition"
+                        },
+                        ":logs:",
+                        {
+                          "Ref": "AWS::Region"
+                        },
+                        ":",
+                        {
+                          "Ref": "AWS::AccountId"
+                        },
+                        ":*"
+                      ]
+                    ]
+                  }
+                }
+              ],
+              "Version": "2012-10-17"
+            },
+            "PolicyName": "LambdaRestApiCloudWatchRolePolicy"
+          }
+        ]
+      }
+    },
+    "PipelineOrchestrationLambdaRestApiAccountB62D7499": {
+      "Type": "AWS::ApiGateway::Account",
+      "Properties": {
+        "CloudWatchRoleArn": {
+          "Fn::GetAtt": [
+            "PipelineOrchestrationLambdaRestApiCloudWatchRole6F4B9723",
+            "Arn"
+          ]
+        }
+      },
+      "DependsOn": [
+        "PipelineOrchestrationLambdaRestApi0420670E"
+      ]
+    },
+    "AWSMLOpsFrameworkRepositorymlopsworkloadorchestratorsingleaccountMLOpsCodeCommitPipelineB6FC7ACFmainEventRule94A7C62F": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "EventPattern": {
+          "source": [
+            "aws.codecommit"
+          ],
+          "resources": [
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:",
+                  {
+                    "Ref": "AWS::Partition"
+                  },
+                  ":codecommit:",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId"
+                  },
+                  ":",
+                  {
+                    "Fn::Select": [
+                      5,
+                      {
+                        "Fn::Split": [
+                          "/",
+                          {
+                            "Ref": "CodeCommitRepoAddress"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              ]
+            }
+          ],
+          "detail-type": [
+            "CodeCommit Repository State Change"
+          ],
+          "detail": {
+            "event": [
+              "referenceCreated",
+              "referenceUpdated"
+            ],
+            "referenceName": [
+              "main"
+            ]
+          }
+        },
+        "State": "ENABLED",
+        "Targets": [
+          {
+            "Arn": {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:",
+                  {
+                    "Ref": "AWS::Partition"
+                  },
+                  ":codepipeline:",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId"
+                  },
+                  ":",
+                  {
+                    "Ref": "MLOpsCodeCommitPipeline7DA8B5B2"
+                  }
+                ]
+              ]
+            },
+            "Id": "Target0",
+            "RoleArn": {
+              "Fn::GetAtt": [
+                "MLOpsCodeCommitPipelineEventsRoleBF55A9BA",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      },
+      "Condition": "GitAddressProvided"
+    },
+    "TakeconfigfileRoleD1BE5721": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "codebuild.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      },
+      "Condition": "GitAddressProvided"
+    },
+    "TakeconfigfileRoleDefaultPolicyC86BF094": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":logs:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":log-group:/aws/codebuild/",
+                      {
+                        "Ref": "Takeconfigfile940F0BB0"
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":logs:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":log-group:/aws/codebuild/",
+                      {
+                        "Ref": "Takeconfigfile940F0BB0"
+                      },
+                      ":*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "codebuild:CreateReportGroup",
+                "codebuild:CreateReport",
+                "codebuild:UpdateReport",
+                "codebuild:BatchPutTestCases",
+                "codebuild:BatchPutCodeCoverages"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":codebuild:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":report-group/",
+                    {
+                      "Ref": "Takeconfigfile940F0BB0"
+                    },
+                    "-*"
+                  ]
+                ]
+              }
+            },
+            {
+              "Action": [
+                "s3:GetObject*",
+                "s3:GetBucket*",
+                "s3:List*"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "MLOpsCodeCommitPipelineArtifactsBucketCF13C4BB",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "MLOpsCodeCommitPipelineArtifactsBucketCF13C4BB",
+                          "Arn"
+                        ]
+                      },
+                      "/*"
+                    ]
+                  ]
+                }
+              ]
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "TakeconfigfileRoleDefaultPolicyC86BF094",
+        "Roles": [
+          {
+            "Ref": "TakeconfigfileRoleD1BE5721"
+          }
+        ]
+      },
+      "Condition": "GitAddressProvided"
+    },
+    "Takeconfigfile940F0BB0": {
+      "Type": "AWS::CodeBuild::Project",
+      "Properties": {
+        "Artifacts": {
+          "Type": "CODEPIPELINE"
+        },
+        "Environment": {
+          "ComputeType": "BUILD_GENERAL1_SMALL",
+          "Image": "aws/codebuild/standard:1.0",
+          "ImagePullCredentialsType": "CODEBUILD",
+          "PrivilegedMode": false,
+          "Type": "LINUX_CONTAINER"
+        },
+        "ServiceRole": {
+          "Fn::GetAtt": [
+            "TakeconfigfileRoleD1BE5721",
+            "Arn"
+          ]
+        },
+        "Source": {
+          "BuildSpec": {
+            "Fn::Join": [
+              "",
+              [
+                "{\n  \"version\": \"0.2\",\n  \"phases\": {\n    \"build\": {\n      \"commands\": [\n        \"ls -a\",\n        \"aws lambda invoke --function-name ",
+                {
+                  "Ref": "PipelineOrchestrationLambdaFunction7EE5E931"
+                },
+                " --payload fileb://mlops-config.json response.json --invocation-type RequestResponse\"\n      ]\n    }\n  }\n}"
+              ]
+            ]
+          },
+          "Type": "CODEPIPELINE"
+        },
+        "Cache": {
+          "Type": "NO_CACHE"
+        },
+        "EncryptionKey": "alias/aws/s3"
+      },
+      "Condition": "GitAddressProvided"
+    },
+    "MLOpsCodeCommitPipelineArtifactsBucketCF13C4BB": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "aws:kms"
+              }
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        }
+      },
+      "UpdateReplacePolicy": "Retain",
+      "DeletionPolicy": "Retain",
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W35",
+              "reason": "This is a managed bucket generated by CDK for codepipeline."
+            },
+            {
+              "id": "W51",
+              "reason": "This is a managed bucket generated by CDK for codepipeline."
+            }
+          ]
+        }
+      },
+      "Condition": "GitAddressProvided"
+    },
+    "MLOpsCodeCommitPipelineArtifactsBucketPolicy0517FBBA": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "MLOpsCodeCommitPipelineArtifactsBucketCF13C4BB"
+        },
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "s3:*",
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              },
+              "Effect": "Deny",
+              "Principal": {
+                "AWS": "*"
+              },
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "MLOpsCodeCommitPipelineArtifactsBucketCF13C4BB",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "MLOpsCodeCommitPipelineArtifactsBucketCF13C4BB",
+                          "Arn"
+                        ]
+                      },
+                      "/*"
+                    ]
+                  ]
+                }
+              ]
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      },
+      "Condition": "GitAddressProvided"
+    },
+    "MLOpsCodeCommitPipelineRole20F62BCD": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "codepipeline.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      },
+      "Condition": "GitAddressProvided"
+    },
+    "MLOpsCodeCommitPipelineRoleDefaultPolicyF794F4C5": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "s3:GetObject*",
+                "s3:GetBucket*",
+                "s3:List*",
+                "s3:DeleteObject*",
+                "s3:PutObject",
+                "s3:PutObjectLegalHold",
+                "s3:PutObjectRetention",
+                "s3:PutObjectTagging",
+                "s3:PutObjectVersionTagging",
+                "s3:Abort*"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "MLOpsCodeCommitPipelineArtifactsBucketCF13C4BB",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "MLOpsCodeCommitPipelineArtifactsBucketCF13C4BB",
+                          "Arn"
+                        ]
+                      },
+                      "/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "MLOpsCodeCommitPipelineSourceCodeCommitCodePipelineActionRoleA937F768",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "MLOpsCodeCommitPipelineTakeConfigprovisionpipelineCodePipelineActionRole0EE4D4C6",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Action": "lambda:InvokeFunction",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "PipelineOrchestrationLambdaFunction7EE5E931",
+                  "Arn"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "MLOpsCodeCommitPipelineRoleDefaultPolicyF794F4C5",
+        "Roles": [
+          {
+            "Ref": "MLOpsCodeCommitPipelineRole20F62BCD"
+          }
+        ]
+      },
+      "Condition": "GitAddressProvided"
+    },
+    "MLOpsCodeCommitPipeline7DA8B5B2": {
+      "Type": "AWS::CodePipeline::Pipeline",
+      "Properties": {
+        "RoleArn": {
+          "Fn::GetAtt": [
+            "MLOpsCodeCommitPipelineRole20F62BCD",
+            "Arn"
+          ]
+        },
+        "Stages": [
+          {
+            "Actions": [
+              {
+                "ActionTypeId": {
+                  "Category": "Source",
+                  "Owner": "AWS",
+                  "Provider": "CodeCommit",
+                  "Version": "1"
+                },
+                "Configuration": {
+                  "RepositoryName": {
+                    "Fn::Select": [
+                      5,
+                      {
+                        "Fn::Split": [
+                          "/",
+                          {
+                            "Ref": "CodeCommitRepoAddress"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "BranchName": "main",
+                  "PollForSourceChanges": false
+                },
+                "Name": "CodeCommit",
+                "OutputArtifacts": [
+                  {
+                    "Name": "Artifact_Source_CodeCommit"
+                  }
+                ],
+                "RoleArn": {
+                  "Fn::GetAtt": [
+                    "MLOpsCodeCommitPipelineSourceCodeCommitCodePipelineActionRoleA937F768",
+                    "Arn"
+                  ]
+                },
+                "RunOrder": 1
+              }
+            ],
+            "Name": "Source"
+          },
+          {
+            "Actions": [
+              {
+                "ActionTypeId": {
+                  "Category": "Build",
+                  "Owner": "AWS",
+                  "Provider": "CodeBuild",
+                  "Version": "1"
+                },
+                "Configuration": {
+                  "ProjectName": {
+                    "Ref": "Takeconfigfile940F0BB0"
+                  }
+                },
+                "InputArtifacts": [
+                  {
+                    "Name": "Artifact_Source_CodeCommit"
+                  }
+                ],
+                "Name": "provision_pipeline",
+                "RoleArn": {
+                  "Fn::GetAtt": [
+                    "MLOpsCodeCommitPipelineTakeConfigprovisionpipelineCodePipelineActionRole0EE4D4C6",
+                    "Arn"
+                  ]
+                },
+                "RunOrder": 1
+              }
+            ],
+            "Name": "TakeConfig"
+          }
+        ],
+        "ArtifactStore": {
+          "Location": {
+            "Ref": "MLOpsCodeCommitPipelineArtifactsBucketCF13C4BB"
+          },
+          "Type": "S3"
+        }
+      },
+      "DependsOn": [
+        "MLOpsCodeCommitPipelineRoleDefaultPolicyF794F4C5",
+        "MLOpsCodeCommitPipelineRole20F62BCD"
+      ],
+      "Condition": "GitAddressProvided"
+    },
+    "MLOpsCodeCommitPipelineSourceCodeCommitCodePipelineActionRoleA937F768": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":iam::",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":root"
+                    ]
+                  ]
+                }
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      },
+      "Condition": "GitAddressProvided"
+    },
+    "MLOpsCodeCommitPipelineSourceCodeCommitCodePipelineActionRoleDefaultPolicy9508C70C": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "s3:GetObject*",
+                "s3:GetBucket*",
+                "s3:List*",
+                "s3:DeleteObject*",
+                "s3:PutObject",
+                "s3:PutObjectLegalHold",
+                "s3:PutObjectRetention",
+                "s3:PutObjectTagging",
+                "s3:PutObjectVersionTagging",
+                "s3:Abort*"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "MLOpsCodeCommitPipelineArtifactsBucketCF13C4BB",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "MLOpsCodeCommitPipelineArtifactsBucketCF13C4BB",
+                          "Arn"
+                        ]
+                      },
+                      "/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "codecommit:GetBranch",
+                "codecommit:GetCommit",
+                "codecommit:UploadArchive",
+                "codecommit:GetUploadArchiveStatus",
+                "codecommit:CancelUploadArchive"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":codecommit:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":",
+                    {
+                      "Fn::Select": [
+                        5,
+                        {
+                          "Fn::Split": [
+                            "/",
+                            {
+                              "Ref": "CodeCommitRepoAddress"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "MLOpsCodeCommitPipelineSourceCodeCommitCodePipelineActionRoleDefaultPolicy9508C70C",
+        "Roles": [
+          {
+            "Ref": "MLOpsCodeCommitPipelineSourceCodeCommitCodePipelineActionRoleA937F768"
+          }
+        ]
+      },
+      "Condition": "GitAddressProvided"
+    },
+    "MLOpsCodeCommitPipelineEventsRoleBF55A9BA": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "events.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      },
+      "Condition": "GitAddressProvided"
+    },
+    "MLOpsCodeCommitPipelineEventsRoleDefaultPolicyE691CECE": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "codepipeline:StartPipelineExecution",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":codepipeline:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":",
+                    {
+                      "Ref": "MLOpsCodeCommitPipeline7DA8B5B2"
+                    }
+                  ]
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "MLOpsCodeCommitPipelineEventsRoleDefaultPolicyE691CECE",
+        "Roles": [
+          {
+            "Ref": "MLOpsCodeCommitPipelineEventsRoleBF55A9BA"
+          }
+        ]
+      },
+      "Condition": "GitAddressProvided"
+    },
+    "MLOpsCodeCommitPipelineTakeConfigprovisionpipelineCodePipelineActionRole0EE4D4C6": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":iam::",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":root"
+                    ]
+                  ]
+                }
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      },
+      "Condition": "GitAddressProvided"
+    },
+    "MLOpsCodeCommitPipelineTakeConfigprovisionpipelineCodePipelineActionRoleDefaultPolicy897756FB": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "codebuild:BatchGetBuilds",
+                "codebuild:StartBuild",
+                "codebuild:StopBuild"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "Takeconfigfile940F0BB0",
+                  "Arn"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "MLOpsCodeCommitPipelineTakeConfigprovisionpipelineCodePipelineActionRoleDefaultPolicy897756FB",
+        "Roles": [
+          {
+            "Ref": "MLOpsCodeCommitPipelineTakeConfigprovisionpipelineCodePipelineActionRole0EE4D4C6"
+          }
+        ]
+      },
+      "Condition": "GitAddressProvided"
+    },
+    "SendAnonymizedData": {
+      "Type": "Custom::AnonymizedData",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "SolutionHelperC369AAA8",
+            "Arn"
+          ]
+        },
+        "Resource": "AnonymizedMetric",
+        "UUID": {
+          "Fn::GetAtt": [
+            "CreateUniqueID",
+            "UUID"
+          ]
+        },
+        "bucketSelected": {
+          "Fn::If": [
+            "S3BucketProvided",
+            "True",
+            "False"
+          ]
+        },
+        "gitSelected": {
+          "Fn::If": [
+            "GitAddressProvided",
+            "True",
+            "False"
+          ]
+        },
+        "Region": {
+          "Ref": "AWS::Region"
+        },
+        "IsMultiAccount": "False",
+        "IsDelegatedAccount": {
+          "Ref": "AWS::NoValue"
+        },
+        "UseModelRegistry": {
+          "Ref": "UseModelRegistry"
+        },
+        "SolutionId": "SO0136",
+        "Version": "v2.2.0"
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete",
+      "Condition": "AnonymizedDatatoAWS"
+    },
+    "AppRegistrySingleAccountRegistrySetup149F22CB": {
+      "Type": "AWS::ServiceCatalogAppRegistry::Application",
+      "Properties": {
+        "Name": {
+          "Fn::Join": [
+            "-",
+            [
+              "App",
+              {
+                "Ref": "AWS::StackName"
+              },
+              "mlops"
+            ]
+          ]
+        },
+        "Description": "Service Catalog application to track and manage all your resources for the solution mlops-workload-orchestrator",
+        "Tags": {
+          "Solutions:ApplicationType": "AWS-Solutions",
+          "Solutions:SolutionID": "SO0136",
+          "Solutions:SolutionName": "mlops-workload-orchestrator",
+          "Solutions:SolutionVersion": "v2.2.0"
+        }
+      }
+    },
+    "AppRegistrySingleAccountRegistrySetupResourceAssociation7b927fc86453A5F6B81E": {
+      "Type": "AWS::ServiceCatalogAppRegistry::ResourceAssociation",
+      "Properties": {
+        "Application": {
+          "Fn::GetAtt": [
+            "AppRegistrySingleAccountRegistrySetup149F22CB",
+            "Id"
+          ]
+        },
+        "Resource": {
+          "Ref": "AWS::StackId"
+        },
+        "ResourceType": "CFN_STACK"
+      }
+    },
+    "AppRegistrySingleAccountRegistrySetupAttributeGroupAssociationbc5f66fcbbf9FEFDB0C7": {
+      "Type": "AWS::ServiceCatalogAppRegistry::AttributeGroupAssociation",
+      "Properties": {
+        "Application": {
+          "Fn::GetAtt": [
+            "AppRegistrySingleAccountRegistrySetup149F22CB",
+            "Id"
+          ]
+        },
+        "AttributeGroup": {
+          "Fn::GetAtt": [
+            "AppRegistrySingleAccountAppAttributesAB53A8FC",
+            "Id"
+          ]
+        }
+      }
+    },
+    "AppRegistrySingleAccountAppAttributesAB53A8FC": {
+      "Type": "AWS::ServiceCatalogAppRegistry::AttributeGroup",
+      "Properties": {
+        "Attributes": {
+          "applicationType": "AWS-Solutions",
+          "version": "v2.2.0",
+          "solutionID": "SO0136",
+          "solutionName": "mlops-workload-orchestrator"
+        },
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              "AttrGrp-",
+              {
+                "Ref": "AWS::StackName"
+              }
+            ]
+          ]
+        },
+        "Description": "Attributes for Solutions Metadata"
+      }
+    }
+  },
+  "Outputs": {
+    "PipelineOrchestrationLambdaRestApiEndpoint9B628338": {
+      "Value": {
+        "Fn::Join": [
+          "",
+          [
+            "https://",
+            {
+              "Ref": "PipelineOrchestrationLambdaRestApi0420670E"
+            },
+            ".execute-api.",
+            {
+              "Ref": "AWS::Region"
+            },
+            ".",
+            {
+              "Ref": "AWS::URLSuffix"
+            },
+            "/",
+            {
+              "Ref": "PipelineOrchestrationLambdaRestApiDeploymentStageprodAD71884A"
+            },
+            "/"
+          ]
+        ]
+      }
+    },
+    "BlueprintsBucket": {
+      "Description": "S3 Bucket to upload MLOps Framework Blueprints",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [
+            "https://s3.console.aws.amazon.com/s3/buckets/",
+            {
+              "Ref": "blueprintrepositoryb915a55a6daf477eaf90f00a4e52f3b2B3FFC6D9"
+            }
+          ]
+        ]
+      }
+    },
+    "AssetsBucket": {
+      "Description": "S3 Bucket to upload model artifact",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [
+            "https://s3.console.aws.amazon.com/s3/buckets/",
+            {
+              "Fn::If": [
+                "S3BucketProvided",
+                {
+                  "Ref": "ExistingS3Bucket"
+                },
+                {
+                  "Ref": "pipelineassets8069ce4301fc4a368f47e3df0a92061cB86835A4"
+                }
+              ]
+            }
+          ]
+        ]
+      }
+    },
+    "ECRRepoName": {
+      "Description": "Amazon ECR repository's name",
+      "Value": {
+        "Fn::If": [
+          "ECRProvided",
+          {
+            "Ref": "ExistingECRRepo"
+          },
+          {
+            "Ref": "ECRRepoC36DC9E6"
+          }
+        ]
+      }
+    },
+    "ECRRepoArn": {
+      "Description": "Amazon ECR repository's arn",
+      "Value": {
+        "Fn::If": [
+          "ECRProvided",
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition"
+                },
+                ":ecr:",
+                {
+                  "Ref": "AWS::Region"
+                },
+                ":",
+                {
+                  "Ref": "AWS::AccountId"
+                },
+                ":repository/",
+                {
+                  "Ref": "ExistingECRRepo"
+                }
+              ]
+            ]
+          },
+          {
+            "Fn::GetAtt": [
+              "ECRRepoC36DC9E6",
+              "Arn"
+            ]
+          }
+        ]
+      }
+    },
+    "ModelRegistryArn": {
+      "Description": "SageMaker model package group arn",
+      "Value": {
+        "Fn::If": [
+          "CreateModelRegistryCondition",
+          {
+            "Fn::GetAtt": [
+              "SageMakerModelRegistry",
+              "ModelPackageGroupArn"
+            ]
+          },
+          "[No Model Package Group was created]"
+        ]
+      }
+    },
+    "MLOpsNotificationsTopicArn": {
+      "Description": "MLOps notifications SNS topic arn.",
+      "Value": {
+        "Ref": "MLOpsNotificationsTopic6E63EA9B"
+      }
+    }
+  },
+  "Mappings": {
+    "AnonymizedData": {
+      "SendAnonymizedData": {
+        "Data": "Yes"
+      }
+    }
+  }
+}

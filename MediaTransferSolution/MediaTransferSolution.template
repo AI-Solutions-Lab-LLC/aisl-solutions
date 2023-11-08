@@ -1,0 +1,1739 @@
+{
+  "Description": "(SO0133) - Media Exchange on AWS - mediaexchange service catalog setup. Version: v1.2.3",
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [
+        {
+          "Label": {
+            "default": "Deployment Configuration"
+          },
+          "Parameters": [
+            "Environment"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Support information"
+          },
+          "Parameters": [
+            "Owner",
+            "OwnerEmails"
+          ]
+        }
+      ]
+    }
+  },
+  "Parameters": {
+    "Environment": {
+      "Type": "String",
+      "Default": "dev",
+      "AllowedPattern": "[A-Za-z0-9]+",
+      "ConstraintDescription": "Malformed input-Parameter Environment must only contain uppercase and lowercase letters and numbers",
+      "Description": "Deployment Environment Name",
+      "MaxLength": 10,
+      "MinLength": 2
+    },
+    "Owner": {
+      "Type": "String",
+      "Default": "mediaops",
+      "AllowedPattern": "[A-Za-z0-9]+",
+      "ConstraintDescription": "Malformed input-Parameter Owner must only contain uppercase and lowercase letters and numbers",
+      "Description": "Maintainer Group",
+      "MaxLength": 64,
+      "MinLength": 2
+    },
+    "OwnerEmails": {
+      "Type": "String",
+      "Default": "mediaops@mycompany.com",
+      "AllowedPattern": "^[_A-Za-z0-9-\\+]+(\\.[_A-Za-z0-9-]+)*@[A-Za-z0-9-]+(\\.[A-Za-z0-9]+)*(\\.[A-Za-z]{2,})$",
+      "Description": "Maintainer Group Email"
+    }
+  },
+  "Mappings": {
+    "AnonymizedData": {
+      "SendAnonymizedData": {
+        "Data": "Yes"
+      }
+    }
+  },
+  "Resources": {
+    "CFNRole8221A0F7": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "cloudformation.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Description": "Service role for Service Catalog portfolio deploy",
+        "RoleName": {
+          "Fn::Join": [
+            "",
+            [
+              "mediaexchange-",
+              {
+                "Ref": "AWS::Region"
+              },
+              "-",
+              {
+                "Ref": "Environment"
+              },
+              "-cfn-deploy"
+            ]
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "SolutionId",
+            "Value": "SO0133"
+          }
+        ]
+      },
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W11",
+              "reason": "(W11) IAM role should not allow * resource on its permissions policy: Many of the resources created/updated/deleted by this role is created on the fly, as part of the normal usage ot the solution. So, the names are not known at the deployment time."
+            },
+            {
+              "id": "W28",
+              "reason": "(W28) Resource found with an explicit name, this disallows updates that require replacement of this resource"
+            }
+          ]
+        }
+      }
+    },
+    "CustomResourcePolicy79526710": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "cloudformation:CreateChangeSet",
+                "cloudformation:CreateStack",
+                "cloudformation:DeleteChangeSet",
+                "cloudformation:DeleteStack",
+                "cloudformation:DescribeChangeSet",
+                "cloudformation:DescribeStackEvents",
+                "cloudformation:DescribeStacks",
+                "cloudformation:ExecuteChangeSet",
+                "cloudformation:ListChangeSets",
+                "cloudformation:ListStacks",
+                "cloudformation:SetStackPolicy",
+                "cloudformation:TagResource",
+                "cloudformation:UpdateStack",
+                "cloudformation:ValidateTemplate"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":cloudformation:*:*:changeSet/*"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":cloudformation:*:*:stack/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "cloudformation:GetTemplateSummary",
+                "config:DescribeConfigurationRecorderStatus",
+                "config:DescribeConfigurationRecorders",
+                "servicecatalog:DescribeProduct",
+                "servicecatalog:DescribeProvisioningParameters",
+                "servicecatalog:ListLaunchPaths",
+                "servicecatalog:ProvisionProduct",
+                "ssm:DescribeDocument",
+                "ssm:GetAutomationExecution"
+              ],
+              "Effect": "Allow",
+              "Resource": "*"
+            },
+            {
+              "Action": [
+                "servicecatalog:CreateProvisionedProductPlan",
+                "servicecatalog:DeleteProvisionedProductPlan",
+                "servicecatalog:DescribeProvisionedProduct",
+                "servicecatalog:DescribeProvisionedProductPlan",
+                "servicecatalog:DescribeRecord",
+                "servicecatalog:ExecuteProvisionedProductPlan",
+                "servicecatalog:ListProvisionedProductPlans",
+                "servicecatalog:ListRecordHistory",
+                "servicecatalog:ListStackInstancesForProvisionedProduct",
+                "servicecatalog:TerminateProvisionedProduct",
+                "servicecatalog:UpdateProvisionedProduct"
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "servicecatalog:accountLevel": "self"
+                }
+              },
+              "Effect": "Allow",
+              "Resource": "*"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "mxc-servicecatalog-cfn",
+        "Roles": [
+          {
+            "Ref": "CFNRole8221A0F7"
+          }
+        ]
+      },
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W11",
+              "reason": "(W11) IAM role should not allow * resource on its permissions policy: Many of the resources created/updated/deleted by this role is created on the fly, as part of the normal usage ot the solution. So, the names are not known at the deployment time."
+            },
+            {
+              "id": "W28",
+              "reason": "(W28) Resource found with an explicit name, this disallows updates that require replacement of this resource"
+            }
+          ]
+        },
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "reason": "Resource ARNs are not generated at the time of policy creation",
+              "id": "AwsSolutions-IAM5"
+            }
+          ]
+        }
+      }
+    },
+    "ServiceCatalogUserRoleDD7EA55E": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":iam::",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":root"
+                    ]
+                  ]
+                }
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Description": "User role for Service Catalog access",
+        "RoleName": {
+          "Fn::Join": [
+            "",
+            [
+              "mediaexchange-",
+              {
+                "Ref": "AWS::Region"
+              },
+              "-",
+              {
+                "Ref": "Environment"
+              },
+              "-admin"
+            ]
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "SolutionId",
+            "Value": "SO0133"
+          }
+        ]
+      },
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W11",
+              "reason": "(W11) IAM role should not allow * resource on its permissions policy: Many of the resources created/updated/deleted by this role is created on the fly, as part of the normal usage ot the solution. So, the names are not known at the deployment time."
+            },
+            {
+              "id": "W28",
+              "reason": "(W28) Resource found with an explicit name, this disallows updates that require replacement of this resource"
+            }
+          ]
+        }
+      }
+    },
+    "ServiceCatalogUserPolicy29358D96": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "cloudformation:CreateChangeSet",
+                "cloudformation:CreateStack",
+                "cloudformation:CreateStackInstances",
+                "cloudformation:CreateStackSet",
+                "cloudformation:DeleteChangeSet",
+                "cloudformation:DeleteStack",
+                "cloudformation:DeleteStackInstances",
+                "cloudformation:DeleteStackSet",
+                "cloudformation:DescribeChangeSet",
+                "cloudformation:DescribeStackEvents",
+                "cloudformation:DescribeStackInstance",
+                "cloudformation:DescribeStackSet",
+                "cloudformation:DescribeStackSetOperation",
+                "cloudformation:DescribeStacks",
+                "cloudformation:ExecuteChangeSet",
+                "cloudformation:ListChangeSets",
+                "cloudformation:ListStackInstances",
+                "cloudformation:ListStackResources",
+                "cloudformation:ListStackSetOperationResults",
+                "cloudformation:ListStackSetOperations",
+                "cloudformation:ListStacks",
+                "cloudformation:SetStackPolicy",
+                "cloudformation:TagResource",
+                "cloudformation:UpdateStack",
+                "cloudformation:UpdateStackInstances",
+                "cloudformation:UpdateStackSet",
+                "cloudformation:ValidateTemplate"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":cloudformation:*:*:changeSet/*"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":cloudformation:*:*:stack/*"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":cloudformation:*:*:stackset/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "cloudformation:GetTemplateSummary",
+                "config:DescribeConfigurationRecorderStatus",
+                "config:DescribeConfigurationRecorders",
+                "servicecatalog:DescribeProduct",
+                "servicecatalog:DescribeProductView",
+                "servicecatalog:DescribeProvisioningParameters",
+                "servicecatalog:ListLaunchPaths",
+                "servicecatalog:ProvisionProduct",
+                "servicecatalog:SearchProducts",
+                "ssm:DescribeDocument",
+                "ssm:GetAutomationExecution"
+              ],
+              "Effect": "Allow",
+              "Resource": "*"
+            },
+            {
+              "Action": [
+                "servicecatalog:CreateProvisionedProductPlan",
+                "servicecatalog:DeleteProvisionedProductPlan",
+                "servicecatalog:DescribeProvisionedProduct",
+                "servicecatalog:DescribeProvisionedProductPlan",
+                "servicecatalog:DescribeRecord",
+                "servicecatalog:DescribeServiceActionExecutionParameters",
+                "servicecatalog:ExecuteProvisionedProductPlan",
+                "servicecatalog:ExecuteProvisionedProductServiceAction",
+                "servicecatalog:ListProvisionedProductPlans",
+                "servicecatalog:ListRecordHistory",
+                "servicecatalog:ListServiceActionsForProvisioningArtifact",
+                "servicecatalog:ListStackInstancesForProvisionedProduct",
+                "servicecatalog:ScanProvisionedProducts",
+                "servicecatalog:SearchProvisionedProducts",
+                "servicecatalog:TerminateProvisionedProduct",
+                "servicecatalog:UpdateProvisionedProduct"
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "servicecatalog:accountLevel": "self"
+                }
+              },
+              "Effect": "Allow",
+              "Resource": "*"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "mxc-servicecatalog-cfn",
+        "Roles": [
+          {
+            "Ref": "ServiceCatalogUserRoleDD7EA55E"
+          }
+        ]
+      },
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W11",
+              "reason": "(W11) IAM role should not allow * resource on its permissions policy: Many of the resources created/updated/deleted by this role is created on the fly, as part of the normal usage ot the solution. So, the names are not known at the deployment time."
+            },
+            {
+              "id": "W28",
+              "reason": "(W28) Resource found with an explicit name, this disallows updates that require replacement of this resource"
+            }
+          ]
+        },
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "reason": "Resource ARNs are not generated at the time of policy creation",
+              "id": "AwsSolutions-IAM5"
+            }
+          ]
+        }
+      }
+    },
+    "Portfolio856A4190": {
+      "Type": "AWS::ServiceCatalog::Portfolio",
+      "Properties": {
+        "Description": "Group of products related to Media Exchange On AWS solution.",
+        "DisplayName": "Media Exchange On AWS",
+        "ProviderName": "AWS Solutions Library",
+        "Tags": [
+          {
+            "Key": "SolutionId",
+            "Value": "SO0133"
+          }
+        ]
+      },
+      "Metadata": {
+        "aws:cdk:path": "MEStack/Portfolio/Resource"
+      }
+    },
+    "PortfolioPortfolioProductAssociation76c5e2e9130a0385BF98": {
+      "Type": "AWS::ServiceCatalog::PortfolioProductAssociation",
+      "Properties": {
+        "PortfolioId": {
+          "Ref": "Portfolio856A4190"
+        },
+        "ProductId": {
+          "Ref": "PublisherF0355618"
+        }
+      },
+      "Metadata": {
+        "aws:cdk:path": "MEStack/Portfolio/PortfolioProductAssociation76c5e2e9130a"
+      }
+    },
+    "PortfolioPortfolioProductAssociationd6b9b6e8b7a67165063F": {
+      "Type": "AWS::ServiceCatalog::PortfolioProductAssociation",
+      "Properties": {
+        "PortfolioId": {
+          "Ref": "Portfolio856A4190"
+        },
+        "ProductId": {
+          "Ref": "Subscriber1956AC64"
+        }
+      },
+      "Metadata": {
+        "aws:cdk:path": "MEStack/Portfolio/PortfolioProductAssociationd6b9b6e8b7a6"
+      }
+    },
+    "PortfolioPortfolioProductAssociatione29849c988a725B93DE5": {
+      "Type": "AWS::ServiceCatalog::PortfolioProductAssociation",
+      "Properties": {
+        "PortfolioId": {
+          "Ref": "Portfolio856A4190"
+        },
+        "ProductId": {
+          "Ref": "Agreement71CF0F8A"
+        }
+      },
+      "Metadata": {
+        "aws:cdk:path": "MEStack/Portfolio/PortfolioProductAssociatione29849c988a7"
+      }
+    },
+    "PortfolioAccessUIRole": {
+      "Type": "AWS::ServiceCatalog::PortfolioPrincipalAssociation",
+      "Properties": {
+        "PortfolioId": {
+          "Ref": "Portfolio856A4190"
+        },
+        "PrincipalARN": {
+          "Fn::GetAtt": [
+            "ServiceCatalogUserRoleDD7EA55E",
+            "Arn"
+          ]
+        },
+        "PrincipalType": "IAM"
+      },
+      "Metadata": {
+        "aws:cdk:path": "MEStack/PortfolioAccessUIRole"
+      }
+    },
+    "PortfolioAccessCliRole": {
+      "Type": "AWS::ServiceCatalog::PortfolioPrincipalAssociation",
+      "Properties": {
+        "PortfolioId": {
+          "Ref": "Portfolio856A4190"
+        },
+        "PrincipalARN": {
+          "Fn::GetAtt": [
+            "CFNRole8221A0F7",
+            "Arn"
+          ]
+        },
+        "PrincipalType": "IAM"
+      },
+      "Metadata": {
+        "aws:cdk:path": "MEStack/PortfolioAccessCliRole"
+      }
+    },
+    "PublisherF0355618": {
+      "Type": "AWS::ServiceCatalog::CloudFormationProduct",
+      "Properties": {
+        "Description": "Publisher onboarding template for Media Exchange On AWS Solution",
+        "Distributor": "AWS Solutions Library / Media Exchange On AWS",
+        "Name": "Publisher",
+        "Owner": {
+          "Ref": "Owner"
+        },
+        "ProvisioningArtifactParameters": [
+          {
+            "DisableTemplateValidation": false,
+            "Info": {
+              "LoadTemplateFromURL": "https://s3.amazonaws.com/solutions-reference/media-exchange-on-aws/v1.2.3/publisher.template"
+            },
+            "Name": "latest"
+          },
+          {
+            "DisableTemplateValidation": false,
+            "Info": {
+              "LoadTemplateFromURL": "https://s3.amazonaws.com/solutions-reference/media-exchange-on-aws/v1.2.3/publisher.template"
+            },
+            "Name": "v1.2.3"
+          }
+        ],
+        "SupportDescription": "Please contact mediaops",
+        "SupportEmail": {
+          "Ref": "OwnerEmails"
+        },
+        "SupportUrl": "https://mediaops.mycompany.com",
+        "Tags": [
+          {
+            "Key": "SolutionId",
+            "Value": "SO0133"
+          }
+        ]
+      },
+      "Metadata": {
+        "aws:cdk:path": "MEStack/Publisher/Resource"
+      }
+    },
+    "Subscriber1956AC64": {
+      "Type": "AWS::ServiceCatalog::CloudFormationProduct",
+      "Properties": {
+        "Description": "Subscriber onboarding template for Media Exchange On AWS Solution",
+        "Distributor": "AWS Solutions Library / Media Exchange On AWS",
+        "Name": "Subscriber",
+        "Owner": {
+          "Ref": "Owner"
+        },
+        "ProvisioningArtifactParameters": [
+          {
+            "DisableTemplateValidation": false,
+            "Info": {
+              "LoadTemplateFromURL": "https://s3.amazonaws.com/solutions-reference/media-exchange-on-aws/v1.2.3/subscriber.template"
+            },
+            "Name": "latest"
+          },
+          {
+            "DisableTemplateValidation": false,
+            "Info": {
+              "LoadTemplateFromURL": "https://s3.amazonaws.com/solutions-reference/media-exchange-on-aws/v1.2.3/subscriber.template"
+            },
+            "Name": "v1.2.3"
+          }
+        ],
+        "SupportDescription": "Please contact mediaops",
+        "SupportEmail": {
+          "Ref": "OwnerEmails"
+        },
+        "SupportUrl": "https://mediaops.mycompany.com",
+        "Tags": [
+          {
+            "Key": "SolutionId",
+            "Value": "SO0133"
+          }
+        ]
+      },
+      "Metadata": {
+        "aws:cdk:path": "MEStack/Subscriber/Resource"
+      }
+    },
+    "Agreement71CF0F8A": {
+      "Type": "AWS::ServiceCatalog::CloudFormationProduct",
+      "Properties": {
+        "Description": "Template to setup shared S3 bucket between publisher and subscriber interchange.",
+        "Distributor": "AWS Solutions Library / Media Exchange On AWS",
+        "Name": "Transfer agreement",
+        "Owner": {
+          "Ref": "Owner"
+        },
+        "ProvisioningArtifactParameters": [
+          {
+            "DisableTemplateValidation": false,
+            "Info": {
+              "LoadTemplateFromURL": "https://s3.amazonaws.com/solutions-reference/media-exchange-on-aws/v1.2.3/agreement.template"
+            },
+            "Name": "latest"
+          },
+          {
+            "DisableTemplateValidation": false,
+            "Info": {
+              "LoadTemplateFromURL": "https://s3.amazonaws.com/solutions-reference/media-exchange-on-aws/v1.2.3/agreement.template"
+            },
+            "Name": "v1.2.3"
+          }
+        ],
+        "SupportDescription": "Please contact mediaops",
+        "SupportEmail": {
+          "Ref": "OwnerEmails"
+        },
+        "SupportUrl": "https://mediaops.mycompany.com",
+        "Tags": [
+          {
+            "Key": "SolutionId",
+            "Value": "SO0133"
+          }
+        ]
+      },
+      "Metadata": {
+        "aws:cdk:path": "MEStack/Agreement/Resource"
+      }
+    },
+    "CFNDeployRole29D10EDC": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "servicecatalog.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Description": "Role for ServiceCatalog/Cloudformation.",
+        "Tags": [
+          {
+            "Key": "SolutionId",
+            "Value": "SO0133"
+          }
+        ]
+      },
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "F3",
+              "reason": "(F3) IAM role should not allow * action on its permissions policy: Many of the resources created/updated/deleted by this role is created on the fly, as part of the normal usage ot the solution. So, the names are not known at the deployment time."
+            },
+            {
+              "id": "F38",
+              "reason": "(F38) IAM role should not allow * resource with PassRole action on its permissions policy: See #F3"
+            },
+            {
+              "id": "W11",
+              "reason": "(W11) IAM role should not allow * resource on its permissions policy: See #F3"
+            }
+          ]
+        }
+      }
+    },
+    "mxcservicecatalogbase1383DD90": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "cloudformation:CreateStack",
+                "cloudformation:DeleteStack",
+                "cloudformation:DescribeStackEvents",
+                "cloudformation:DescribeStacks",
+                "cloudformation:GetTemplateSummary",
+                "cloudformation:SetStackPolicy",
+                "cloudformation:UpdateStack",
+                "cloudformation:ValidateTemplate",
+                "s3:GetObject",
+                "servicecatalog:*"
+              ],
+              "Effect": "Allow",
+              "Resource": "*"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "mxc-servicecatalog-base",
+        "Roles": [
+          {
+            "Ref": "CFNDeployRole29D10EDC"
+          }
+        ]
+      },
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "F4",
+              "reason": "All service catalog actions are allowed"
+            }
+          ]
+        }
+      }
+    },
+    "mxcpublisherdeployF0F48070": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "events:PutPermission",
+                "events:RemovePermission",
+                "kms:CancelKeyDeletion",
+                "kms:Create*",
+                "kms:Delete*",
+                "kms:Describe*",
+                "kms:Disable*",
+                "kms:Enable*",
+                "kms:Get*",
+                "kms:List*",
+                "kms:Put*",
+                "kms:Revoke*",
+                "kms:ScheduleKeyDeletion",
+                "kms:TagResource",
+                "kms:UntagResource",
+                "kms:Update*",
+                "s3:CreateBucket",
+                "s3:DeleteBucket",
+                "s3:DeleteBucketPolicy",
+                "s3:Describe*",
+                "s3:Get*",
+                "s3:List*",
+                "s3:PutAccountPublicAccessBlock",
+                "s3:PutBucketAcl",
+                "s3:PutBucketLogging",
+                "s3:PutBucketPolicy",
+                "s3:PutBucketPublicAccessBlock",
+                "s3:PutBucketTagging",
+                "s3:PutBucketVersioning",
+                "s3:PutEncryptionConfiguration",
+                "s3:PutLifecycleConfiguration",
+                "sns:AddPermission",
+                "sns:CreateTopic",
+                "sns:DeleteTopic",
+                "sns:Describe*",
+                "sns:Get*",
+                "sns:List*",
+                "sns:ListSubscriptions",
+                "sns:ListSubscriptionsByTopic",
+                "sns:ListTagsForResource",
+                "sns:RemovePermission",
+                "sns:SetTopicAttributes",
+                "sns:Subscribe",
+                "sns:TagResource",
+                "sns:Unsubscribe",
+                "sns:UntagResource",
+                "sqs:AddPermission",
+                "sqs:CreateQueue",
+                "sqs:DeleteQueue",
+                "sqs:GetQueueAttributes",
+                "sqs:GetQueueUrl",
+                "sqs:ListDeadLetterSourceQueues",
+                "sqs:ListQueueTags",
+                "sqs:ListQueues",
+                "sqs:RemovePermission",
+                "sqs:SetQueueAttributes",
+                "sqs:TagQueue",
+                "sqs:UntagQueue"
+              ],
+              "Effect": "Allow",
+              "Resource": "*"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "mxc-publisher-deploy",
+        "Roles": [
+          {
+            "Ref": "CFNDeployRole29D10EDC"
+          }
+        ]
+      },
+      "Metadata": {
+        "aws:cdk:path": "MEStack/mxc-publisher-deploy/Resource",
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "reason": "Resource ARNs are not generated at the time of policy creation",
+              "id": "AwsSolutions-IAM5"
+            }
+          ]
+        }
+      }
+    },
+    "mxcsubscriberdeploy2C16AE3D": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "events:PutPermission",
+                "events:RemovePermission",
+                "kms:CancelKeyDeletion",
+                "kms:Create*",
+                "kms:Delete*",
+                "kms:Describe*",
+                "kms:Disable*",
+                "kms:Enable*",
+                "kms:Get*",
+                "kms:List*",
+                "kms:Put*",
+                "kms:Revoke*",
+                "kms:ScheduleKeyDeletion",
+                "kms:TagResource",
+                "kms:UntagResource",
+                "kms:Update*",
+                "sns:AddPermission",
+                "sns:CreateTopic",
+                "sns:DeleteTopic",
+                "sns:Describe*",
+                "sns:Get*",
+                "sns:List*",
+                "sns:ListSubscriptions",
+                "sns:ListSubscriptionsByTopic",
+                "sns:ListTagsForResource",
+                "sns:RemovePermission",
+                "sns:SetTopicAttributes",
+                "sns:Subscribe",
+                "sns:TagResource",
+                "sns:Unsubscribe",
+                "sns:UntagResource",
+                "sqs:AddPermission",
+                "sqs:CreateQueue",
+                "sqs:DeleteQueue",
+                "sqs:GetQueueAttributes",
+                "sqs:GetQueueUrl",
+                "sqs:ListDeadLetterSourceQueues",
+                "sqs:ListQueueTags",
+                "sqs:ListQueues",
+                "sqs:RemovePermission",
+                "sqs:SetQueueAttributes",
+                "sqs:TagQueue",
+                "sqs:UntagQueue"
+              ],
+              "Effect": "Allow",
+              "Resource": "*"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "mxc-subscriber-deploy",
+        "Roles": [
+          {
+            "Ref": "CFNDeployRole29D10EDC"
+          }
+        ]
+      },
+      "Metadata": {
+        "aws:cdk:path": "MEStack/mxc-subscriber-deploy/Resource",
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "reason": "Resource ARNs are not generated at the time of policy creation",
+              "id": "AwsSolutions-IAM5"
+            }
+          ]
+        }
+      }
+    },
+    "mxcagreementdeploy5AF167CA": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "events:DeleteRule",
+                "events:Describe*",
+                "events:DisableRule",
+                "events:EnableRule",
+                "events:Get*",
+                "events:List*",
+                "events:PutRule",
+                "events:PutTargets",
+                "events:RemoveTargets",
+                "events:TagResource",
+                "events:UntagResource",
+                "iam:AttachRolePolicy",
+                "iam:CreateRole",
+                "iam:CreateServiceLinkedRole",
+                "iam:DeleteRole",
+                "iam:DeleteRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:GetRole",
+                "iam:GetRolePolicy",
+                "iam:PassRole",
+                "iam:PutRolePolicy",
+                "iam:TagRole",
+                "iam:UntagRole",
+                "iam:UpdateAssumeRolePolicy",
+                "kms:CancelKeyDeletion",
+                "kms:Create*",
+                "kms:Delete*",
+                "kms:Describe*",
+                "kms:Disable*",
+                "kms:Enable*",
+                "kms:Get*",
+                "kms:List*",
+                "kms:Put*",
+                "kms:Revoke*",
+                "kms:ScheduleKeyDeletion",
+                "kms:TagResource",
+                "kms:UntagResource",
+                "kms:Update*",
+                "lambda:AddPermission",
+                "lambda:CreateFunction",
+                "lambda:DeleteFunction",
+                "lambda:Describe*",
+                "lambda:Get*",
+                "lambda:InvokeFunction*",
+                "lambda:List*",
+                "lambda:PublishVersion",
+                "lambda:RemovePermission",
+                "lambda:TagResource",
+                "lambda:UntagResource",
+                "lambda:Update*",
+                "s3:CreateBucket",
+                "s3:DeleteBucket",
+                "s3:DeleteBucketOwnershipControls",
+                "s3:DeleteBucketPolicy",
+                "s3:Describe*",
+                "s3:Get*",
+                "s3:List*",
+                "s3:PutAccountPublicAccessBlock",
+                "s3:PutBucketLogging",
+                "s3:PutBucketNotification",
+                "s3:PutBucketOwnershipControls",
+                "s3:PutBucketPolicy",
+                "s3:PutBucketPublicAccessBlock",
+                "s3:PutBucketTagging",
+                "s3:PutBucketVersioning",
+                "s3:PutEncryptionConfiguration",
+                "s3:PutLifecycleConfiguration"
+              ],
+              "Effect": "Allow",
+              "Resource": "*"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "mxc-agreement-deploy",
+        "Roles": [
+          {
+            "Ref": "CFNDeployRole29D10EDC"
+          }
+        ]
+      },
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "F39",
+              "reason": "Resource ARNs are not generated at the time of policy creation"
+            }
+          ]
+        }
+      }
+    },
+    "LaunchRoleConstraintPublisher": {
+      "Type": "AWS::ServiceCatalog::LaunchRoleConstraint",
+      "Properties": {
+        "Description": "Administrative role for deploying publishers to Media Exchange",
+        "LocalRoleName": {
+          "Ref": "CFNDeployRole29D10EDC"
+        },
+        "PortfolioId": {
+          "Ref": "Portfolio856A4190"
+        },
+        "ProductId": {
+          "Ref": "PublisherF0355618"
+        }
+      },
+      "DependsOn": [
+        "CFNDeployRole29D10EDC",
+        "PortfolioPortfolioProductAssociation76c5e2e9130a0385BF98",
+        "PortfolioPortfolioProductAssociationd6b9b6e8b7a67165063F",
+        "PortfolioPortfolioProductAssociatione29849c988a725B93DE5",
+        "Portfolio856A4190",
+        "PublisherF0355618"
+      ],
+      "Metadata": {
+        "aws:cdk:path": "MEStack/LaunchRoleConstraintPublisher"
+      }
+    },
+    "LaunchRoleConstraintSubscriber": {
+      "Type": "AWS::ServiceCatalog::LaunchRoleConstraint",
+      "Properties": {
+        "Description": "Administrative role for deploying subscribers to Media Exchange",
+        "LocalRoleName": {
+          "Ref": "CFNDeployRole29D10EDC"
+        },
+        "PortfolioId": {
+          "Ref": "Portfolio856A4190"
+        },
+        "ProductId": {
+          "Ref": "Subscriber1956AC64"
+        }
+      },
+      "DependsOn": [
+        "CFNDeployRole29D10EDC",
+        "PortfolioPortfolioProductAssociation76c5e2e9130a0385BF98",
+        "PortfolioPortfolioProductAssociationd6b9b6e8b7a67165063F",
+        "PortfolioPortfolioProductAssociatione29849c988a725B93DE5",
+        "Portfolio856A4190",
+        "Subscriber1956AC64"
+      ],
+      "Metadata": {
+        "aws:cdk:path": "MEStack/LaunchRoleConstraintSubscriber"
+      }
+    },
+    "LaunchRoleConstraintAgreement": {
+      "Type": "AWS::ServiceCatalog::LaunchRoleConstraint",
+      "Properties": {
+        "Description": "Administrative role for deploying publisher & subscriber agreement to Media Exchange",
+        "LocalRoleName": {
+          "Ref": "CFNDeployRole29D10EDC"
+        },
+        "PortfolioId": {
+          "Ref": "Portfolio856A4190"
+        },
+        "ProductId": {
+          "Ref": "Agreement71CF0F8A"
+        }
+      },
+      "DependsOn": [
+        "Agreement71CF0F8A",
+        "CFNDeployRole29D10EDC",
+        "PortfolioPortfolioProductAssociation76c5e2e9130a0385BF98",
+        "PortfolioPortfolioProductAssociationd6b9b6e8b7a67165063F",
+        "PortfolioPortfolioProductAssociatione29849c988a725B93DE5",
+        "Portfolio856A4190"
+      ],
+      "Metadata": {
+        "aws:cdk:path": "MEStack/LaunchRoleConstraintAgreement"
+      }
+    },
+    "DefaultApplicationAttributeGroup41AD7209": {
+      "Type": "AWS::ServiceCatalogAppRegistry::AttributeGroup",
+      "Properties": {
+        "Attributes": {
+          "ApplicationType": "AWS-Solutions",
+          "Version": "v1.2.3",
+          "SolutionID": "SO0133",
+          "SolutionName": "Media Exchange on AWS"
+        },
+        "Description": "Attribute group for solution information.",
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              "SO0133-",
+              {
+                "Ref": "AWS::Region"
+              },
+              "-",
+              {
+                "Ref": "AWS::StackName"
+              }
+            ]
+          ]
+        },
+        "Tags": {
+          "SolutionId": "SO0133"
+        }
+      },
+      "Metadata": {
+        "aws:cdk:path": "MEStack/DefaultApplicationAttributeGroup/Resource"
+      }
+    },
+    "AppRegistryApp5349BE86": {
+      "Type": "AWS::ServiceCatalogAppRegistry::Application",
+      "Properties": {
+        "Description": "Service Catalog application to track and manage all your resources. The SolutionId is SO0133 and SolutionVersion is v1.2.3.",
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              "media-exchange-on-aws-",
+              {
+                "Ref": "AWS::Region"
+              },
+              "-",
+              {
+                "Ref": "AWS::AccountId"
+              }
+            ]
+          ]
+        },
+        "Tags": {
+          "SolutionId": "SO0133",
+          "Solutions:ApplicationType": "AWS-Solutions",
+          "Solutions:SolutionId": "SO0133",
+          "Solutions:SolutionName": "Media Exchange on AWS",
+          "Solutions:SolutionVersion": "v1.2.3"
+        }
+      },
+      "DependsOn": [
+        "DefaultApplicationAttributeGroup41AD7209"
+      ],
+      "Metadata": {
+        "aws:cdk:path": "MEStack/AppRegistryApp/Resource"
+      }
+    },
+    "AppRegistryAppResourceAssociation5cb011d7ba1a86366EC9": {
+      "Type": "AWS::ServiceCatalogAppRegistry::ResourceAssociation",
+      "Properties": {
+        "Application": {
+          "Fn::GetAtt": [
+            "AppRegistryApp5349BE86",
+            "Id"
+          ]
+        },
+        "Resource": {
+          "Ref": "AWS::StackId"
+        },
+        "ResourceType": "CFN_STACK"
+      },
+      "DependsOn": [
+        "DefaultApplicationAttributeGroup41AD7209"
+      ],
+      "Metadata": {
+        "aws:cdk:path": "MEStack/AppRegistryApp/ResourceAssociation5cb011d7ba1a"
+      }
+    },
+    "AppRegistryAppAttributeGroupAssociation56a2702e645a7EDBB1F2": {
+      "Type": "AWS::ServiceCatalogAppRegistry::AttributeGroupAssociation",
+      "Properties": {
+        "Application": {
+          "Fn::GetAtt": [
+            "AppRegistryApp5349BE86",
+            "Id"
+          ]
+        },
+        "AttributeGroup": {
+          "Fn::GetAtt": [
+            "DefaultApplicationAttributeGroup41AD7209",
+            "Id"
+          ]
+        }
+      },
+      "DependsOn": [
+        "DefaultApplicationAttributeGroup41AD7209"
+      ],
+      "Metadata": {
+        "aws:cdk:path": "MEStack/AppRegistryApp/AttributeGroupAssociation56a2702e645a"
+      }
+    },
+    "CustomResourceRoleMetrics802C29BA": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Tags": [
+          {
+            "Key": "SolutionId",
+            "Value": "SO0133"
+          }
+        ]
+      },
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W11",
+              "reason": "* is required to create CloudWatch logs and interact with metrics actions that do not support resource level permissions"
+            },
+            {
+              "id": "W76",
+              "reason": "All policies are required by the custom resource."
+            }
+          ]
+        }
+      }
+    },
+    "CustomResourcePolicyMetricsAA460E9C": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":logs:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":log-group:/aws/lambda/*"
+                  ]
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "CustomResourcePolicyMetricsAA460E9C",
+        "Roles": [
+          {
+            "Ref": "CustomResourceRoleMetrics802C29BA"
+          }
+        ]
+      },
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W12",
+              "reason": "* is required to create CloudWatch logs and interact with metrics actions that do not support resource level permissions"
+            },
+            {
+              "id": "W76",
+              "reason": "High complexity due to number of policy statements needed for creating all custom resources"
+            }
+          ]
+        }
+      }
+    },
+    "CustomResource8CDCD7A7": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "S3Bucket": {
+            "Fn::Sub": "solutions-${AWS::Region}"
+          },
+          "S3Key": "media-exchange-on-aws/v1.2.3/asset5f577aa27d8c5ccf25a0eab473bcfbcd0f2b5b30a10a3c62d417644f81fb9f9a.zip"
+        },
+        "Description": "Used to deploy resources not supported by CloudFormation",
+        "Environment": {
+          "Variables": {
+            "SOLUTION_IDENTIFIER": "AwsSolution/SO0133/v1.2.3"
+          }
+        },
+        "FunctionName": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Ref": "AWS::StackName"
+              },
+              "-custom-resource"
+            ]
+          ]
+        },
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "CustomResourceRoleMetrics802C29BA",
+            "Arn"
+          ]
+        },
+        "Runtime": "nodejs18.x",
+        "Tags": [
+          {
+            "Key": "SolutionId",
+            "Value": "SO0133"
+          }
+        ],
+        "Timeout": 30
+      },
+      "DependsOn": [
+        "CustomResourcePolicy79526710",
+        "CustomResourceRoleMetrics802C29BA"
+      ],
+      "Metadata": {
+        "cfn_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "W58",
+              "reason": "Invalid warning: function has access to cloudwatch"
+            },
+            {
+              "id": "W89",
+              "reason": "This CustomResource does not need to be deployed inside a VPC"
+            },
+            {
+              "id": "W92",
+              "reason": "This CustomResource does not need to define ReservedConcurrentExecutions to reserve simultaneous executions"
+            }
+          ]
+        }
+      }
+    },
+    "UUID": {
+      "Type": "AWS::CloudFormation::CustomResource",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "CustomResource8CDCD7A7",
+            "Arn"
+          ]
+        },
+        "Resource": "UUID"
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete",
+      "Metadata": {
+        "aws:cdk:path": "MEStack/UUID/Default"
+      }
+    },
+    "AnonymizedMetric": {
+      "Type": "AWS::CloudFormation::CustomResource",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "CustomResource8CDCD7A7",
+            "Arn"
+          ]
+        },
+        "Resource": "AnonymizedMetric",
+        "SolutionId": "SO0133",
+        "UUID": {
+          "Fn::GetAtt": [
+            "UUID",
+            "UUID"
+          ]
+        },
+        "Version": "v1.2.3",
+        "SendAnonymizedMetric": {
+          "Fn::FindInMap": [
+            "AnonymizedData",
+            "SendAnonymizedData",
+            "Data"
+          ]
+        }
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete",
+      "Metadata": {
+        "aws:cdk:path": "MEStack/AnonymizedMetric/Default"
+      }
+    },
+    "CDKMetadata": {
+      "Type": "AWS::CDK::Metadata",
+      "Properties": {
+        "Analytics": "v2:deflate64:H4sIAAAAAAAA/3VS227CMAz9Ft7bQEGb9riCxF42rWIfgEwaSiCNo8RhQlH/fUm5CKrxZFvn2D6+TFkoJlM2GcGvy3l9yJXcsPBDwA/ZYqsrsNAKEjYFX2CM1E0WqesgoWVhhUokpLcVKslPfVbvdZkT9ii54ECgsGGhQkvbiOGZ9F9QWaw9p9I55BJIoh7AUnNpQD0QFPp6ibbtw0uFlPYU+ASv+S6pXqB2ZEFqGsqNw1rRyIieWIg5JZGVG0/iw6I3qUppTJzzJnIlHHrLxUD7Y94d2GUK2k0NLCyjmiv96kc5szU4J8ixMpkYs7nnB0FzcKLLru2yHo0Xa9JtFt4RtjfsTlbyvz0Zf14N6lqe+8xe2CQHZXYQ3+D98gfjZJ8u5EIPg53cLaTrMo21YHs3PhZvrHhlxWjvpMyt1yRbwVZn+wdG60nygAIAAA=="
+      },
+      "Metadata": {
+        "aws:cdk:path": "MEStack/CDKMetadata/Default"
+      },
+      "Condition": "CDKMetadataAvailable"
+    }
+  },
+  "Outputs": {
+    "CFNDeployerRole": {
+      "Description": "Deployment Role",
+      "Value": {
+        "Fn::GetAtt": [
+          "CFNRole8221A0F7",
+          "Arn"
+        ]
+      },
+      "Export": {
+        "Name": "CFNDeployerRole"
+      }
+    },
+    "PublisherProductId": {
+      "Description": "ProductId of the publisher product",
+      "Value": {
+        "Ref": "PublisherF0355618"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              "mxc-",
+              {
+                "Ref": "AWS::Region"
+              },
+              "-",
+              {
+                "Ref": "Environment"
+              },
+              "-sc-publisher-productid"
+            ]
+          ]
+        }
+      }
+    },
+    "SubscriberProductId": {
+      "Description": "ProductId of the subscriber product",
+      "Value": {
+        "Ref": "Subscriber1956AC64"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              "mxc-",
+              {
+                "Ref": "AWS::Region"
+              },
+              "-",
+              {
+                "Ref": "Environment"
+              },
+              "-sc-subscriber-productid"
+            ]
+          ]
+        }
+      }
+    },
+    "AgreementProductId": {
+      "Description": "ProductId of the agreement product",
+      "Value": {
+        "Ref": "Agreement71CF0F8A"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Join": [
+            "",
+            [
+              "mxc-",
+              {
+                "Ref": "AWS::Region"
+              },
+              "-",
+              {
+                "Ref": "Environment"
+              },
+              "-sc-agreement-productid"
+            ]
+          ]
+        }
+      }
+    },
+    "ConsoleUrl": {
+      "Description": "ServiceCatalog portfolio manager url.",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [
+            "https://signin.aws.amazon.com/switchrole?roleName=",
+            {
+              "Ref": "ServiceCatalogUserRoleDD7EA55E"
+            },
+            "&account=",
+            {
+              "Ref": "AWS::AccountId"
+            },
+            "&region=",
+            {
+              "Ref": "AWS::Region"
+            },
+            "&redirect_uri=https://console.aws.amazon.com/servicecatalog/home?region=",
+            {
+              "Ref": "AWS::Region"
+            },
+            "&isSceuc=true#/products"
+          ]
+        ]
+      }
+    }
+  },
+  "Conditions": {
+    "CDKMetadataAvailable": {
+      "Fn::Or": [
+        {
+          "Fn::Or": [
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "af-south-1"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "ap-east-1"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "ap-northeast-1"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "ap-northeast-2"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "ap-south-1"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "ap-southeast-1"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "ap-southeast-2"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "ca-central-1"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "cn-north-1"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "cn-northwest-1"
+              ]
+            }
+          ]
+        },
+        {
+          "Fn::Or": [
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "eu-central-1"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "eu-north-1"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "eu-south-1"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "eu-west-1"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "eu-west-2"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "eu-west-3"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "me-south-1"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "sa-east-1"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "us-east-1"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "us-east-2"
+              ]
+            }
+          ]
+        },
+        {
+          "Fn::Or": [
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "us-west-1"
+              ]
+            },
+            {
+              "Fn::Equals": [
+                {
+                  "Ref": "AWS::Region"
+                },
+                "us-west-2"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
